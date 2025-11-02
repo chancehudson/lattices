@@ -7,7 +7,9 @@ use crate::*;
 /// Store a cache of (Element::Cardinality, sigma) keyed to a displacement
 /// sigma will be stored as sigma * 10^5 (up to 5 decimals precision for sigma keys)
 /// this is independent of the floating point accuracy inside the CDT
-static CDT_CACHE: LazyLock<RwLock<HashMap<(u128, u32), Arc<GaussianCDT>>>> =
+///
+/// see GaussianCDT::identifier
+static CDT_CACHE: LazyLock<RwLock<HashMap<GaussianCDTIdentifier, Arc<GaussianCDT>>>> =
     LazyLock::new(|| RwLock::new(HashMap::default()));
 /// How far from the standard deviation we should precompute.
 const TAIL_BOUND_MULTIPLIER: f64 = 8.0;
@@ -26,28 +28,110 @@ pub struct GaussianCDT {
     pub cardinality: u128,
     /// standard deviation of the distribution
     pub sigma: f64,
+    /// Max displacement to sample, unsigned displacement
+    pub tail_bounds: u32,
     /// normalized probability sum paired with displacement
     pub displacements: Vec<(f64, i32)>,
     // sum of the PDF evaluated over all possible output values
     pub normalized_sum: f64,
 }
 
+type GaussianCDTIdentifier = (u128, u32, u32);
 impl GaussianCDT {
+    /// generate a distinct identifier for the table using the parameters
+    ///
+    /// equal identifiers should yield equal `self.displacements`
+    /// and `self.normalized_sum`
+    ///
+    /// (cardinality, sigma_key, tail bounds
+    pub fn identifier(&self) -> GaussianCDTIdentifier {
+        let scale = 10f64.powi(5);
+
+        let sigma_key = self.sigma * scale;
+        assert!(
+            sigma_key - sigma_key.floor() < 1.0,
+            "CDT: sigma is too precise"
+        );
+        assert!(sigma_key <= u32::MAX as f64, "CDT: sigma is too large");
+        let sigma_key = sigma_key as u32;
+
+        (self.cardinality, sigma_key, self.tail_bounds)
+    }
+
+    fn new<E: Element>(sigma: f64, tail_bounds: f64) -> Self {
+        assert_eq!(tail_bounds.is_sign_positive(), true);
+        let tail_bounds: u32 = (tail_bounds.ceil() as u64)
+            .try_into()
+            .expect("CDT tail_bounds is too large");
+        assert!(tail_bounds >= 1);
+        assert!(
+            tail_bounds < 100_000,
+            "CDT refusing to build table with thousands of elements"
+        );
+        Self {
+            cardinality: E::CARDINALITY,
+            sigma,
+            tail_bounds,
+            displacements: Vec::default(),
+            normalized_sum: 0.0,
+        }
+    }
+
+    /// Retrieve or compute a cumulative distribution table.
+    pub fn cache_or_init<E: Element>(sigma: f64) -> Arc<Self> {
+        let mut out = Self::new::<E>(sigma, sigma * TAIL_BOUND_MULTIPLIER);
+        if let Some(cdt) = CDT_CACHE.read().unwrap().get(&out.identifier()) {
+            return cdt.clone();
+        }
+        log::info!("Building CDT with max {} elements", out.tail_bounds * 2 + 1);
+        if out.tail_bounds > 50 {
+            log::warn!("Building CDT with more than 100 elements. Consider adjusting tail bounds.");
+        }
+        let mut displacements = Vec::default();
+        let mut total_prob = 0f64;
+        let tail_bounds = out.tail_bounds as i32;
+        println!("tail: {}", tail_bounds);
+        for disp in -tail_bounds..=tail_bounds {
+            let prob_exp = (disp as f64).powi(2) / (2.0 * sigma * sigma);
+            // value of the distribution function at this point
+            let prob = f64::exp(-prob_exp);
+            displacements.push((prob, disp));
+            total_prob += prob;
+            log::debug!("CDT sigma {}, disp: {} prob: {}", sigma, disp, prob);
+        }
+        log::debug!("CDT actual size: {}", displacements.len());
+        let mut normalized_sum = 0f64;
+        for (prob, _disp) in displacements.iter_mut() {
+            *prob /= total_prob;
+            let prob_floor = normalized_sum;
+            normalized_sum += *prob;
+            *prob = prob_floor;
+        }
+        out.normalized_sum = total_prob;
+        out.displacements = displacements;
+        let out = Arc::new(out);
+        CDT_CACHE
+            .write()
+            .unwrap()
+            .insert(out.identifier(), out.clone());
+        out
+    }
+
     /// sample an element from the distribution
-    pub fn sample<F: Element, R: Rng>(&self, rng: &mut R) -> F {
+    pub fn sample<E: Element, R: Rng>(&self, rng: &mut R) -> E {
         let r: f64 = rng.random_range(0.0..1.0);
         for i in 0..self.displacements.len() - 1 {
             let (last_prob, disp) = self.displacements[i];
             let (next_prob, _) = self.displacements[i + 1];
             if r >= last_prob && r < next_prob {
-                return F::at_displacement(disp);
+                return E::at_displacement(disp);
             }
         }
         panic!("sampled probability is outside CDT");
     }
 
     /// Sample a vector of elements of length `len`
-    pub fn sample_vec<F: Element, R: Rng>(&self, len: usize, rng: &mut R) -> Vector<F> {
+    pub fn sample_vec<E: Element, R: Rng>(&self, len: usize, rng: &mut R) -> Vector<E> {
         let mut probs = Vec::with_capacity(len);
         for _ in 0..len {
             probs.push(rng.random_range(0.0..1.0));
@@ -58,7 +142,7 @@ impl GaussianCDT {
             let (next_prob, _) = self.displacements[i + 1];
             for prob in &probs {
                 if *prob >= last_prob && *prob < next_prob {
-                    out.push(F::at_displacement(disp));
+                    out.push(E::at_displacement(disp));
                 }
             }
         }
@@ -81,55 +165,6 @@ impl GaussianCDT {
         }
         0.0
     }
-
-    /// Compute or retrieve a cumulative distribution table.
-    pub fn new<F: Element>(sigma: f64) -> Arc<Self> {
-        let theta_key = sigma * 10f64.powi(5);
-        assert!(
-            theta_key - theta_key.floor() < 1.0,
-            "CDT: sigma is too precise"
-        );
-        assert!(theta_key <= u32::MAX as f64, "CDT: sigma is too large");
-        let theta_key = theta_key as u32;
-        if let Some(cdt) = CDT_CACHE.read().unwrap().get(&(F::CARDINALITY, theta_key)) {
-            return cdt.clone();
-        }
-        let dist = (TAIL_BOUND_MULTIPLIER * sigma).ceil() as i32;
-        assert!(dist >= 1, "sigma is too small");
-        log::info!("Building CDT with max {} elements", dist * 2 + 1);
-        if dist > 50 {
-            log::warn!("Building CDT with more than 100 elements. Consider adjusting tail bounds.");
-        }
-        let mut displacements = Vec::default();
-        let mut total_prob = 0f64;
-        for disp in -dist..=dist {
-            let prob_exp = (disp as f64).powi(2) / (2.0 * sigma * sigma);
-            // value of the distribution function at this point
-            let prob = f64::exp(-prob_exp);
-            displacements.push((prob, disp));
-            total_prob += prob;
-            log::debug!("CDT sigma {}, disp: {} prob: {}", sigma, disp, prob);
-        }
-        log::debug!("CDT actual size: {}", displacements.len());
-        let mut normalized_sum = 0f64;
-        for (prob, _disp) in displacements.iter_mut() {
-            *prob /= total_prob;
-            let prob_floor = normalized_sum;
-            normalized_sum += *prob;
-            *prob = prob_floor;
-        }
-        let out = Arc::new(Self {
-            cardinality: F::CARDINALITY,
-            sigma,
-            displacements,
-            normalized_sum: total_prob,
-        });
-        CDT_CACHE
-            .write()
-            .unwrap()
-            .insert((F::CARDINALITY, theta_key), out.clone());
-        out
-    }
 }
 
 #[cfg(test)]
@@ -148,7 +183,7 @@ mod test {
         // individual retrieval
         for i in 10..100 {
             let sigma = (i as f64) / 10.;
-            let cdt = GaussianCDT::new::<E>(sigma);
+            let cdt = GaussianCDT::cache_or_init::<E>(sigma);
             let mut samples = HashMap::<i32, usize>::default();
 
             for _ in 0..SAMPLES_PER_CDT {
@@ -160,7 +195,7 @@ mod test {
         // vectorized retrieval
         for i in 10..100 {
             let sigma = (i as f64) / 10.;
-            let cdt = GaussianCDT::new::<E>(sigma);
+            let cdt = GaussianCDT::cache_or_init::<E>(sigma);
             let mut samples = HashMap::<i32, usize>::default();
 
             let batch_size: usize = rand::random_range(1..10);
@@ -181,6 +216,15 @@ mod test {
         }
     }
 
+    // all variables get locally shadowed as f64 casted type
+    macro_rules! all_f64 {
+        ($($name: ident),*) => {
+            $(
+                let $name = $name as f64;
+            )*
+        };
+    }
+
     #[test]
     fn cdt_mean() {
         type Field = OxfoiScalar;
@@ -189,8 +233,9 @@ mod test {
         get_cdt_sample_pairs::<Field, _>(
             |cdt, samples, _rng| {
                 let mut sum = 0f64;
-                for (disp, count) in samples.iter() {
-                    sum += *disp as f64 * *count as f64;
+                for (disp, count) in samples {
+                    all_f64!(disp, count);
+                    sum += disp * count;
                 }
                 // check that mean < 3*sigma/sqrt(N)
                 assert!(
@@ -210,18 +255,22 @@ mod test {
         get_cdt_sample_pairs::<Field, _>(
             |cdt, samples, _rng| {
                 let mut sum = 0f64;
-                for (disp, count) in samples.iter() {
-                    sum += *disp as f64 * *count as f64;
+                for (disp, count) in &samples {
+                    let disp = *disp;
+                    let count = *count;
+                    all_f64!(disp, count);
+                    sum += disp * count;
                 }
                 let mean = sum / SAMPLES_PER_CDT as f64;
                 let mut variance = 0f64;
                 for (disp, count) in samples {
-                    variance += count as f64 * (disp as f64 - mean).powi(2);
+                    all_f64!(count, disp, mean);
+                    variance += count * (disp - mean).powi(2);
                 }
                 let variance = variance / SAMPLES_PER_CDT as f64;
                 let std_dev = variance.sqrt();
                 let percent_diff = ((std_dev - cdt.sigma) / cdt.sigma).abs();
-                // measured std_dev within 1% ofsigma
+                // measured std_dev within 1% of sigma
                 assert!(percent_diff < 0.01);
             },
             rng,
@@ -260,6 +309,7 @@ mod test {
                 let mut chi_sq = 0f64;
                 for disp in ((-cdt.sigma * 10.) as i32)..((cdt.sigma * 10.) as i32) {
                     let count = samples.entry(disp).or_default();
+
                     let expected = cdt.prob(disp) * SAMPLES_PER_CDT as f64;
                     if expected < 1.0 {
                         continue;
