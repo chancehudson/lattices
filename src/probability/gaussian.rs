@@ -15,7 +15,10 @@ static CDT_CACHE: LazyLock<RwLock<HashMap<(u128, u32), Arc<GaussianCDT>>>> =
 static MIN_PRECISION: LazyLock<f64> = LazyLock::new(|| 10f64.powi(5) * f64::EPSILON);
 
 /// An instance of a cumulative distribution table for a finite field, with a specific sigma
-/// and constant tail bounds of TAIL_BOUND_MULTIPLIER * σ.
+/// and tail bounds limited by precision. Panics if the distribution cannot be precisely computed.
+///
+/// Minimum tail = 7 * sigma
+/// Maximum tail = 15 * sigma
 ///
 /// Entries in the finite field are referred to by "displacement". Distance from the 0 element,
 /// signed to indicate forward or reverse in the field.
@@ -30,7 +33,7 @@ pub struct GaussianCDT {
     pub cardinality: u128,
     /// standard deviation of the distribution
     pub sigma: f64,
-    /// normalized probability sum paired with displacement
+    /// normalized probability paired with displacement
     pub displacements: HashMap<i32, f64>,
     /// sum of gaussian pdf evaluated over all possible output values
     /// evaluated with min 10e-5 precision
@@ -40,12 +43,8 @@ pub struct GaussianCDT {
 }
 
 impl GaussianCDT {
-    /// generate a distinct identifier for the table using the parameters
-    ///
-    /// equal identifiers should yield equal `self.displacements`
-    /// and `self.normalized_sum`
-    ///
-    /// (E::CARDINALITY, sigma_key)
+    /// generate a distinct identifier for the table
+    /// `(E::CARDINALITY, sigma_key)`
     pub fn identifier<E: Element>(sigma: f64) -> (u128, u32) {
         let scale = 10f64.powi(5);
 
@@ -61,9 +60,10 @@ impl GaussianCDT {
     }
 
     /// Given a finite field and a standard deviation precompute the probabilities of selecting
-    /// elements in a range up to 15 * sigma. This includes ~ 1 - 2^167 of the probability mass.
+    /// elements in a range up to 15 * sigma. This includes ~ 1 - 2^-167 of the probability mass.
     ///
-    /// Sample down to a minimum of 7 * sigma based on precision limitations.
+    /// Compute minimum of 7 * sigma based on precision limitations. Panic if cannot precisely
+    /// compute.
     fn new<E: Element>(sigma: f64) -> Self {
         // 15*sigma = ~2^-167 odds of sampling within the range (according to Claude)
         let std_devs = 15f64;
@@ -162,7 +162,7 @@ impl GaussianCDT {
         })
     }
 
-    /// sample an element from the distribution
+    /// Sample an element from the distribution.
     pub fn sample<E: Element, R: Rng>(&self, rng: &mut R) -> E {
         let r: f64 = rng.random_range(0.0..1.0);
         let mut out = None;
@@ -177,7 +177,7 @@ impl GaussianCDT {
         out.unwrap_or(E::at_displacement(self.tail_bounds.1))
     }
 
-    /// Sample a vector of elements of length `len`.
+    /// Sample a vector of elements of length `len` from the distribution.
     pub fn sample_vec<E: Element, R: Rng>(&self, len: usize, rng: &mut R) -> Vector<E> {
         let mut samples = Vec::with_capacity(len);
         for _ in 0..len {
