@@ -1,5 +1,5 @@
 mod chi_sq;
 mod gaussian;
 
-use chi_sq::*;
-use gaussian::*;
+pub use chi_sq::*;
+pub use gaussian::*;

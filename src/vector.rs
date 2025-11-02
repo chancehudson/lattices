@@ -63,6 +63,23 @@ impl<E: Element> Vector<E> {
     pub fn append(&mut self, mut other: Self) {
         self.entries.append(&mut other.entries);
     }
+
+    /// The l2 norm of the vector. Represents the magnitude of the vector.
+    ///
+    /// The distance of each element from zero is squared and then
+    /// summed. The square root of the sum is returned.
+    ///
+    /// `sqrt(x[0]^2 + x[1]^2 + x[2]^2 ...)`
+    pub fn norm_l2(&self) -> f64 {
+        let mut sum = 0f64;
+        for entry in &self.entries {
+            println!("{}", entry.displacement());
+            let disp = entry.displacement().pow(2).unsigned_abs();
+            assert!(disp < u64::MAX as u128);
+            sum += disp as f64;
+        }
+        sum.sqrt()
+    }
 }
 
 impl<E: Element> Display for Vector<E> {

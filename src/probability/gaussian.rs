@@ -5,13 +5,14 @@ use std::sync::RwLock;
 
 use crate::*;
 
-/// Store a cache of (Element::Cardinality, sigma) keyed to a displacement
-/// sigma will be stored as sigma * 10^5 (up to 5 decimals precision for sigma keys)
+/// Store a cache of (E::CARDINALITY, sigma) keyed to a CDT
+///
+/// sigma will be stored as sigma * 10^5 (up to 5 decimals precision for std dev)
 /// this is independent of the floating point accuracy inside the CDT
 static CDT_CACHE: LazyLock<RwLock<HashMap<(u128, u32), Arc<GaussianCDT>>>> =
     LazyLock::new(|| RwLock::new(HashMap::default()));
 
-/// Compute all probabilities with values > MIN_PRECISION * f64::EPSILON
+/// Compute all probabilities with values > 1e5 * f64::EPSILON
 static MIN_PRECISION: LazyLock<f64> = LazyLock::new(|| 10f64.powi(5) * f64::EPSILON);
 
 /// An instance of a cumulative distribution table for a finite field, with a specific sigma
@@ -36,7 +37,7 @@ pub struct GaussianCDT {
     /// normalized probability paired with displacement
     pub displacements: HashMap<i32, f64>,
     /// sum of gaussian pdf evaluated over all possible output values
-    /// evaluated with min 10e-5 precision
+    /// evaluated with min 1e-5 precision
     pub normalized_sum: f64,
     /// Computed bounds based on sigma and decimal precision limits
     pub tail_bounds: (i32, i32),
@@ -179,28 +180,25 @@ impl GaussianCDT {
 
     /// Sample a vector of elements of length `len` from the distribution.
     pub fn sample_vec<E: Element, R: Rng>(&self, len: usize, rng: &mut R) -> Vector<E> {
-        let mut samples = Vec::with_capacity(len);
-        for _ in 0..len {
-            samples.push(rng.random_range(0.0..1.0));
+        let mut samples = BTreeMap::<usize, f64>::default();
+        for i in 0..len {
+            samples.insert(i, rng.random_range(0.0..1.0));
         }
         let mut out = BTreeMap::<usize, E>::default();
         for (disp, prob) in self.displacements_iter() {
-            samples = samples
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, sample)| {
-                    if sample < prob {
-                        out.insert(i, E::at_displacement(disp));
-                        return None;
-                    }
-                    Some(sample)
-                })
-                .collect::<Vec<_>>();
+            samples.retain(|i, sample| {
+                if *sample < prob {
+                    out.insert(*i, E::at_displacement(disp));
+                    return false;
+                }
+                true
+            });
             if samples.is_empty() {
                 break;
             }
         }
         assert!(samples.is_empty(), "CDT not all samples were matched");
+        assert_eq!(out.len(), len, "CDT outputting invalid sample len");
         out.into_values().collect::<Vec<_>>().into()
     }
 

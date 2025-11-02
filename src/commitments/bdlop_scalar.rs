@@ -1,6 +1,7 @@
 use crate::*;
 
 use anyhow::Result;
+use rand::SeedableRng;
 
 pub trait ElementHasher<E: Element> {
     fn finish(&self) -> E;
@@ -66,19 +67,22 @@ impl<E: Element> BDLOPScalar<E> {
         val: Vector<E>,
         lattice: (Matrix<E>, Matrix<E>),
         rng: &mut R,
-    ) -> ((Vector<E>, Vector<E>), Self) {
+    ) -> (Vector<E>, Self) {
         let (a_1, a_2) = lattice;
-        let msg_len = val.len();
 
         // the secret committing to the zero component
-        let r_1 = Vector::random(a_1.height(), rng);
-        // the secret committing to the message component
-        let r_2 = Vector::random(msg_len, rng);
+        let r = (0..a_1.width())
+            .map(|_| {
+                let sample: i32 = rng.random_range(0..=2) - 1;
+                E::at_displacement(sample)
+            })
+            .collect::<Vec<_>>()
+            .into();
 
-        let c_1 = &a_1 * &r_1;
-        let c_2 = &a_2 * &r_2 + &val;
+        let c_1 = &a_1 * &r;
+        let c_2 = &a_2 * &r + &val;
 
-        ((r_1, r_2), Self { a_1, a_2, c_1, c_2 })
+        (r, Self { a_1, a_2, c_1, c_2 })
     }
 
     /// Attempt to open a commitment directly using the stored `r` value.
@@ -96,16 +100,37 @@ impl<E: Element> BDLOPScalar<E> {
     ///
     /// Described on page 15 of https://eprint.iacr.org/2016/997.pdf
     ///
-    /// This implementation modifies the d value to be a vector of small elements, instead of a
-    /// single polynomial.
-    pub fn try_open_zk<H: ElementHasher<E> + Default, R: Rng>(
+    /// This implementation modifies the d value to be a single ternary element. This challenge is
+    /// not meaningfully sound.
+    pub fn try_open_zk<R: Rng>(
         &self,
+        r: &Vector<E>,
         rng: &mut R,
-    ) -> Result<Vector<E>> {
-        let y = Vector::random(self.a_1.width(), rng);
+    ) -> Result<(E, Vector<E>, Vector<E>)> {
+        let sigma = 5f64;
+        let y = GaussianCDT::cache_or_init::<E>(sigma).sample_vec(self.a_1.width(), rng);
         let t = &self.a_1 * &y;
-        let mut hasher = H::default();
-        unimplemented!()
+        let hash = blake3::hash(
+            &t.iter()
+                .flat_map(|v: &E| v.as_le_bytes())
+                .collect::<Vec<u8>>(),
+        );
+        let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
+
+        let z;
+        let d;
+        loop {
+            let d_maybe = E::at_displacement(csprng.random_range(0..2) - 1);
+            let z_maybe = y.clone() + &(r.clone() * d_maybe);
+            if z_maybe.norm_l2() >= 2.0 * sigma * (self.a_1.width() as f64).sqrt() {
+                // reject and try again
+                continue;
+            }
+            z = z_maybe;
+            d = d_maybe;
+            break;
+        }
+        Ok((d, t, z))
     }
 }
 
@@ -122,5 +147,20 @@ mod test {
             let lattice = BDLOPScalar::lattice_for(i, rng);
             let _ = BDLOPScalar::<Field>::commit(Vector::random(i, rng), lattice, rng);
         }
+    }
+
+    #[test]
+    fn bdlop_open_zk() -> Result<()> {
+        type Field = OxfoiScalar;
+        let rng = &mut rand::rng();
+        let msg_len = 5;
+        let lattice = BDLOPScalar::lattice_for(msg_len, rng);
+        let msg = Vector::random(msg_len, rng);
+
+        let (r, c) = BDLOPScalar::<Field>::commit(msg, lattice, rng);
+        let (d, t, z) = c.try_open_zk(&r, rng)?;
+
+        assert_eq!(&c.a_1 * &z, t + &(c.c_1 * d));
+        Ok(())
     }
 }

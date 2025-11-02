@@ -78,7 +78,7 @@ pub trait Element:
             panic!("refusing to use displacement outside of field in production");
         }
         if disp >= 0 {
-            Self::from(disp.abs() as u128)
+            Self::from(disp as u128)
         } else {
             Self::from(Self::CARDINALITY - disp.abs() as u128)
         }
@@ -91,7 +91,7 @@ pub trait Element:
     fn displacement(self) -> i128 {
         // distance from the zero element in the positive dimension only
         let dist: u128 = self.into();
-        if self.into() > (Self::CARDINALITY / 2) {
+        if dist > (Self::CARDINALITY / 2) {
             -((Self::CARDINALITY - dist) as i128)
         } else {
             dist as i128
@@ -145,7 +145,10 @@ pub trait Element:
         let parts_len = Self::BIT_WIDTH.div_ceil(bits);
         let divisor = 1 << bits;
         let mut v: u128 = (*self).into();
-        let mut out = Vec::default();
+        let mut out = Vec::with_capacity(parts_len);
+        for _ in 0..parts_len {
+            out.push(0u8);
+        }
         for i in 0..parts_len {
             if v == 0 {
                 break;
