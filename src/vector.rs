@@ -2,6 +2,8 @@ use std::ops::IndexMut;
 
 use super::*;
 
+// TODO: vectors backed by abstract iterators
+// can transfer between threads to evaluate as needed
 #[derive(Debug, Clone, PartialEq)]
 pub struct Vector<E: Element> {
     entries: Vec<E>,
