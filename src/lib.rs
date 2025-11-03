@@ -1,6 +1,7 @@
 mod commitments;
 mod fields;
 mod matrix;
+mod polynomial;
 mod probability;
 mod vector;
 
@@ -10,8 +11,8 @@ mod test;
 use commitments::*;
 use fields::*;
 use matrix::*;
+use polynomial::*;
 use probability::*;
-use rand::Rng;
 use vector::*;
 
 use std::fmt::Display;
@@ -25,21 +26,21 @@ use std::ops::SubAssign;
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use rand::Rng;
 
 /// The default value should be the additive identity.
 pub trait Element:
     Sized
-    + Default
     + Copy
+    + Default
     + Display
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
     + SubAssign
-    + MulAssign
     + Mul<Output = Self>
+    + MulAssign
     + PartialEq
-    + From<BinaryScalar>
     + From<u128>
     + Into<u128>
 {

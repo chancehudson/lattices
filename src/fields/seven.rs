@@ -10,14 +10,6 @@ pub struct SevenScalar {
     val: u8,
 }
 
-impl From<BinaryScalar> for SevenScalar {
-    fn from(value: BinaryScalar) -> Self {
-        Self {
-            val: value.val.into(),
-        }
-    }
-}
-
 impl Distribution<SevenScalar> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SevenScalar {
         SevenScalar {

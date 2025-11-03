@@ -11,14 +11,6 @@ pub struct OxfoiScalar {
     val: u128,
 }
 
-impl From<BinaryScalar> for OxfoiScalar {
-    fn from(value: BinaryScalar) -> Self {
-        Self {
-            val: value.val.into(),
-        }
-    }
-}
-
 impl Distribution<OxfoiScalar> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> OxfoiScalar {
         OxfoiScalar {
