@@ -9,7 +9,7 @@ pub struct Polynomial<const N: usize, E: FieldScalar> {
 impl<const N: usize, E: FieldScalar> RingElement for Polynomial<N, E> {
     const CARDINALITY: u128 = E::CARDINALITY.pow(N as u32);
 
-    /// Uniform randomly sample an element from the field provided an RNG source.
+    /// Uniform randomly sample an element from the ring provided an RNG source.
     fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
         Self {
             coefs: std::array::from_fn(|_| E::sample_uniform(rng)),
@@ -66,7 +66,7 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
             .find_map(|(degree, coef)| if coef.is_zero() { Some(degree) } else { None });
         if let Some(exp) = final_nonzero_term_exp {
             use std::iter::once;
-            once(vec![E::BYTE_WIDTH as u8])
+            once(vec![E::BYTE_WIDTH])
                 .chain(once(E::negone().as_le_bytes()))
                 .chain(self.coefs().take(exp + 1).map(|coef| coef.as_le_bytes()))
                 .flatten()

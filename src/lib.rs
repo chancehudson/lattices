@@ -47,7 +47,7 @@ pub trait RingElement:
     + From<u128>
 {
     const CARDINALITY: u128;
-    // const Q: u128 = Self::CARDINALITY;
+    const Q: u128 = Self::CARDINALITY;
 
     /// Is the element the additive identity?
     fn is_zero(&self) -> bool {
@@ -71,13 +71,12 @@ pub trait RingElement:
         Self::from(0)
     }
 
-    /// Uniform randomly sample an element from the field provided an RNG source.
+    /// Uniform randomly sample an element from the ring provided an RNG source.
     fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
         Self::from(rng.random::<u128>())
     }
 }
 
-///
 /// A scalar field element.
 pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAssign<u8> {
     /// Sample from a discrete gaussian distribution with standard deviation sigma.
@@ -124,7 +123,8 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
     /// Number of bits necessary to represent an element.
     const BIT_WIDTH: usize = (Self::CARDINALITY.ilog2() + 1) as usize;
     /// Number of bytes necessary to represent an element.
-    const BYTE_WIDTH: usize = Self::BIT_WIDTH / 8 + if Self::BIT_WIDTH % 8 > 0 { 1 } else { 0 };
+    const BYTE_WIDTH: u8 =
+        (Self::BIT_WIDTH / 8 + if Self::BIT_WIDTH % 8 > 0 { 1 } else { 0 }) as u8;
 
     /// Determine either number of 2^bits elements in a single element, or upper bound of each
     /// chunked element given `bits` chunks.
@@ -171,7 +171,7 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
         let parts_len = Self::BIT_WIDTH.div_ceil(bits);
         let divisor = 1 << bits;
         let mut v: u128 = (*self).into();
-        let mut out = Vec::with_capacity(parts_len);
+        let mut out = Vec::with_capacity(parts_len.into());
         for _ in 0..parts_len {
             out.push(0u8);
         }

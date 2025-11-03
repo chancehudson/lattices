@@ -53,7 +53,7 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
         //
         // we subtract msg_len because the A_2 matrix will provide an additional msg_len
         // vectors of mixing
-        let a_1_height = msg_len * E::BIT_WIDTH - msg_len;
+        let a_1_height: usize = msg_len * E::BIT_WIDTH - msg_len;
         // the A_2 matrix always has height equal to the message length
         //
         // our width is equal to the height of the A_1 matrix plus 2 * msg_len

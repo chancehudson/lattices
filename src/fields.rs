@@ -11,9 +11,15 @@ macro_rules! export_fields {
     };
 }
 
-/// Generate a Scalar implementation backed by a u32.
+/// Generate a scalar prime field implementation.
 macro_rules! integer_prime_field {
     ($cardinality:expr, $name:ident, $data_ty:ty, $sq_data_ty:ty) => {
+        // cardinality must fit in data type
+        const _: () = assert!($cardinality < (<$data_ty>::MAX as u128));
+        // multiplication must fit inside the next biggest type
+        const _: () = assert!($cardinality * $cardinality < (<$sq_data_ty>::MAX) as u128);
+        const _: () = assert!((<$data_ty>::MAX as u128) < (<$sq_data_ty>::MAX as u128));
+
         #[derive(Debug, Copy, Clone, Default, PartialEq)]
         pub struct $name {
             // absolute value of displacement
@@ -22,17 +28,12 @@ macro_rules! integer_prime_field {
 
         impl RingElement for $name {
             const CARDINALITY: u128 = $cardinality;
-            // const BYTE_LEN: usize =
         }
 
         impl FieldScalar for $name {}
 
         impl From<u128> for $name {
             fn from(value: u128) -> Self {
-                // allow addition inside the base type
-                assert!($cardinality < (<$data_ty>::MAX as u128));
-                // allow multiplication inside the next biggest type
-                assert!($cardinality * $cardinality < (<$sq_data_ty>::MAX) as u128);
                 Self {
                     norm: ((value % $cardinality) as $data_ty),
                 }
