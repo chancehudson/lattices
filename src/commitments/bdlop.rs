@@ -3,23 +3,40 @@ use crate::*;
 use anyhow::Result;
 use rand::SeedableRng;
 
-pub trait ElementHasher<E: Element> {
-    fn finish(&self) -> E;
-    fn write(&mut self, bytes: &[u8]);
-}
+const SIGMA: f64 = 3.5;
 
 /// An implementation of Baum et. al. commitments.
 /// https://eprint.iacr.org/2016/997.pdf
 ///
 #[derive(Clone, Debug)]
-pub struct BDLOP<const N: usize, E: Element> {
+pub struct BDLOP<const N: usize, E: FieldScalar> {
     a_1: Matrix<Polynomial<N, E>>,
     a_2: Matrix<Polynomial<N, E>>,
     c_1: Vector<Polynomial<N, E>>,
     c_2: Vector<Polynomial<N, E>>,
 }
 
-impl<const N: usize, E: Element> BDLOP<N, E> {
+impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
+    /// Check the parameters for safe operation.
+    fn check_params() -> Result<()> {
+        let d = N.ilog2();
+        // our N value must be a power of 2
+        if 2usize.pow(d) != N {
+            anyhow::bail!("BDLOP degree of polynomial ring must be a power of 2");
+        }
+        // our scalar field cardinality must be congruent to 2*d + 1 (mod 4d)
+        // required for invertibility of challenge polynomials
+        let base = 4 * d;
+        let q_congr = (E::CARDINALITY % (base as u128)) as u32;
+        let d_congr = (2 * d + 1) % base;
+        if q_congr != d_congr {
+            anyhow::bail!(
+                "BDLOP scalar field must be congruent to 2*d + 1 (mod 4*d), where d is the base 2 logarithm of the polynomial ring degree N"
+            );
+        }
+        Ok(())
+    }
+
     /// Given a message length determine the dimension of a commitment matrix.
     ///
     /// BDLOP commitments vertically compose an SIS commitment to 0 with an SIS commitment
@@ -83,8 +100,7 @@ impl<const N: usize, E: Element> BDLOP<N, E> {
                 }
                 p
             })
-            .collect::<Vec<_>>()
-            .into();
+            .collect::<Vector<_>>();
 
         let c_1 = &a_1 * &r;
         let c_2 = &a_2 * &r + &val;
@@ -102,7 +118,7 @@ impl<const N: usize, E: Element> BDLOP<N, E> {
         Ok(&self.c_2 - &self.a_2 * &r)
     }
 
-    /// Attempt to generate a non-interactive ZK proof of opening.
+    /// Attempt to generate a non-interactive ZK argument of opening.
     ///
     /// Described on page 15 of https://eprint.iacr.org/2016/997.pdf
     pub fn try_open_zk<R: Rng>(
@@ -114,31 +130,27 @@ impl<const N: usize, E: Element> BDLOP<N, E> {
         Vector<Polynomial<N, E>>,
         Vector<Polynomial<N, E>>,
     )> {
-        unimplemented!()
-        // let sigma = 3f64;
-        // let y = GaussianCDT::cache_or_init::<E>(sigma).sample_vec(self.a_1.width(), rng);
-        // let t = &self.a_1 * &y;
-        // let hash = blake3::hash(
-        //     &t.iter()
-        //         .flat_map(|v: &E| v.as_le_bytes())
-        //         .collect::<Vec<u8>>(),
-        // );
-        // let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
-        //
-        // let z;
-        // let d;
-        // loop {
-        //     let d_maybe = E::at_displacement(csprng.random_range(0..2) - 1);
-        //     let z_maybe = y.clone() + &(r.clone() * d_maybe);
-        //     if z_maybe.norm_l2() >= 2.0 * sigma * (self.a_1.width() as f64).sqrt() {
-        //         // reject and try again
-        //         continue;
-        //     }
-        //     z = z_maybe;
-        //     d = d_maybe;
-        //     break;
-        // }
-        // Ok((d, t, z))
+        if &self.a_1 * r != self.c_1 {
+            anyhow::bail!("Failed to open commitment, secret is incorrect");
+        }
+        loop {
+            let y = (0..self.a_1.width())
+                .map(|_| Polynomial::sample_gaussian(SIGMA, rng))
+                .collect::<Vector<_>>();
+            let t = &self.a_1 * &y;
+            let hash = blake3::hash(&t.iter().flat_map(|v| v.as_le_bytes()).collect::<Vec<u8>>());
+            let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
+
+            let d: Polynomial<N, E> =
+                std::array::from_fn(|_| E::at_displacement(csprng.random_range(0..2) - 1)).into();
+            let z = y.clone() + &(r.clone() * d);
+            // TODO: rejection sampling
+            // if p.norm_l2() >= 2.0 * sigma * (self.a_1.width() as f64).sqrt() {
+            //     // reject and try again
+            //     continue;
+            // }
+            return Ok((d, t, z));
+        }
     }
 }
 
@@ -147,32 +159,69 @@ mod test {
     use super::*;
 
     #[test]
-    fn bdlop_commit_var_dimension() {
-        type Field = OxfoiScalar;
+    fn bdlop_commit_var_dimension() -> Result<()> {
+        type Field = Seven753Scalar;
+        const RING_DEGREE: usize = 16;
         let rng = &mut rand::rng();
         // just make sure our dimensions match in matrix/vector ops
+        BDLOP::<RING_DEGREE, Field>::check_params()?;
         for i in 1..10 {
             let lattice = BDLOP::<64, Field>::lattice_for(i, rng);
-            let (r, commitment) = BDLOP::commit(Vector::random(i, rng), lattice, rng);
+            let (r, commitment) = BDLOP::commit(Vector::sample_uniform(i, rng), lattice, rng);
             commitment
                 .try_open(&r)
                 .expect("failed to open BDLOP commitment");
+            commitment
+                .try_open(&(r.clone() + &r))
+                .expect_err("should fail to open BDLOP commitment to bad r value");
         }
+        Ok(())
     }
 
     #[test]
     fn bdlop_open_zk() -> Result<()> {
-        return Ok(());
-        // type Field = OxfoiScalar;
-        // let rng = &mut rand::rng();
-        // let msg_len = 5;
-        // let lattice = BDLOP::<64, Field>::lattice_for(msg_len, rng);
-        // let msg = Vector::random(msg_len, rng);
-        //
-        // let (r, c) = BDLOP::commit(msg, lattice, rng);
-        // let (d, t, z) = c.try_open_zk(&r, rng)?;
-        //
-        // assert_eq!(&c.a_1 * &z, t + &(c.c_1 * d));
-        // Ok(())
+        type Field = Seven753Scalar;
+        const RING_DEGREE: usize = 16;
+        let rng = &mut rand::rng();
+        let msg_len = 1;
+        let lattice = BDLOP::<RING_DEGREE, Field>::lattice_for(msg_len, rng);
+        let msg = Vector::sample_uniform(msg_len, rng);
+
+        let (r, c) = BDLOP::commit(msg, lattice, rng);
+        let (d, t, z) = c.try_open_zk(&r, rng)?;
+
+        for p in &z {
+            let max_l2 = 3.0 * SIGMA * (RING_DEGREE as f64).sqrt();
+            assert!(p.norm_l2() < max_l2);
+        }
+        assert_eq!(&c.a_1 * &z, t + &(c.c_1 * d));
+        Ok(())
+    }
+
+    #[test]
+    fn bdlop_params_check() -> Result<()> {
+        fn test<const N: usize, E: FieldScalar>() {
+            print!("Q={}, N={N}", E::CARDINALITY);
+            match BDLOP::<N, E>::check_params() {
+                Ok(()) => println!(" OK"),
+                Err(err) => println!(" ERR | {err}"),
+            }
+        }
+        macro_rules! all_rings {
+            ($scalar:path) => {
+                test::<16, $scalar>();
+                test::<32, $scalar>();
+                test::<64, $scalar>();
+                test::<128, $scalar>();
+                test::<256, $scalar>();
+                test::<512, $scalar>();
+                test::<1024, $scalar>();
+            };
+        }
+        all_rings!(crate::SevenScalar);
+        all_rings!(crate::OxfoiScalar);
+        all_rings!(crate::LOLScalar);
+        all_rings!(crate::Seven753Scalar);
+        Ok(())
     }
 }

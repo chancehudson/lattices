@@ -3,6 +3,7 @@ mod fields;
 mod matrix;
 mod polynomial;
 mod probability;
+mod r1cs;
 mod vector;
 
 #[cfg(test)]
@@ -13,6 +14,7 @@ use fields::*;
 use matrix::*;
 use polynomial::*;
 use probability::*;
+use r1cs::*;
 use vector::*;
 
 use std::fmt::Display;
@@ -28,10 +30,11 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use rand::Rng;
 
-/// The default value should be the additive identity.
-pub trait Element:
+/// An element of a commutative ring.
+pub trait RingElement:
     Sized
     + Copy
+    + Clone
     + Default
     + Display
     + Add<Output = Self>
@@ -42,17 +45,18 @@ pub trait Element:
     + MulAssign
     + PartialEq
     + From<u128>
-    + Into<u128>
 {
-    const BIT_WIDTH: usize;
     const CARDINALITY: u128;
+    // const Q: u128 = Self::CARDINALITY;
 
     /// Is the element the additive identity?
-    fn is_zero(&self) -> bool;
+    fn is_zero(&self) -> bool {
+        *self == Self::default()
+    }
 
     /// Multiplicative identity.
     fn one() -> Self {
-        Self::from(1)
+        Self::default() + 1.into()
     }
 
     /// Multiplicatively flips a value in centered representation.
@@ -65,6 +69,24 @@ pub trait Element:
     /// Additive identity.
     fn zero() -> Self {
         Self::from(0)
+    }
+
+    /// Uniform randomly sample an element from the field provided an RNG source.
+    fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
+        Self::from(rng.random::<u128>())
+    }
+}
+
+///
+/// A scalar field element.
+pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAssign<u8> {
+    /// Sample from a discrete gaussian distribution with standard deviation sigma.
+    ///
+    /// Internally uses a statically cached cumulative distribution table (CDT). Table is
+    /// lazily computed, so first access will incur many f64 operations. Subsequent accesses are
+    /// approximately 10 * sigma f64 comparisons.
+    fn sample_gaussian<R: Rng>(sigma: f64, rng: &mut R) -> Self {
+        GaussianCDT::cache_or_init::<Self>(sigma).sample(rng)
     }
 
     /// Return the finite field element at a certain displacement.
@@ -89,7 +111,7 @@ pub trait Element:
     /// is > q/2 returns the negated value of the element.
     ///
     /// Distance is a measurement, and so not a field element.
-    fn displacement(self) -> i128 {
+    fn displacement(self) -> i128 /* TODO: <- i32 */ {
         // distance from the zero element in the positive dimension only
         let dist: u128 = self.into();
         if dist > (Self::CARDINALITY / 2) {
@@ -99,7 +121,10 @@ pub trait Element:
         }
     }
 
-    fn sample_rand<R: Rng>(rng: &mut R) -> Self;
+    /// Number of bits necessary to represent an element.
+    const BIT_WIDTH: usize = (Self::CARDINALITY.ilog2() + 1) as usize;
+    /// Number of bytes necessary to represent an element.
+    const BYTE_WIDTH: usize = Self::BIT_WIDTH / 8 + if Self::BIT_WIDTH % 8 > 0 { 1 } else { 0 };
 
     /// Determine either number of 2^bits elements in a single element, or upper bound of each
     /// chunked element given `bits` chunks.
@@ -161,53 +186,13 @@ pub trait Element:
         assert_eq!(v, 0);
         out
     }
-}
 
-pub struct R1CS<E: Element> {
-    a: Matrix<E>,
-    b: Matrix<E>,
-    c: Matrix<E>,
-}
-
-impl<E: Element> R1CS<E> {
-    pub fn identity(height: usize, width: usize) -> Self {
-        let v = Matrix::zero(height, width);
-        Self {
-            a: v.clone(),
-            b: v.clone(),
-            c: v.clone(),
+    fn from_le_bytes<'a>(bytes: impl Iterator<Item = &'a u8>) -> Self {
+        let mut v = 0u128;
+        for (i, byte) in bytes.enumerate() {
+            v += (*byte as u128) << i;
         }
-    }
-
-    pub fn eval(&self, witness: &Vector<E>) -> Result<Vector<E>> {
-        self.assert_consistency()?;
-
-        let ab = (self.a.clone() * witness) * &(self.b.clone() * witness);
-        let c = self.c.clone() * witness;
-
-        Ok(ab - c)
-    }
-
-    pub fn dimension(&self) -> (usize, usize) {
-        self.a.dimension()
-    }
-
-    fn assert_consistency(&self) -> Result<()> {
-        let dimension = self.a.dimension();
-        if self.b.dimension() != dimension {
-            anyhow::bail!(
-                "R1CS A and B dimension mismatch, expected {:?}, got {:?}",
-                dimension,
-                self.b.dimension()
-            );
-        }
-        if self.c.dimension() != dimension {
-            anyhow::bail!(
-                "R1CS A and C dimension mismatch, expected {:?}, got {:?}",
-                dimension,
-                self.c.dimension()
-            );
-        }
-        Ok(())
+        assert!(v < Self::CARDINALITY);
+        v.into()
     }
 }

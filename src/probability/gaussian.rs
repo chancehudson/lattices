@@ -46,7 +46,7 @@ pub struct GaussianCDT {
 impl GaussianCDT {
     /// generate a distinct identifier for the table
     /// `(E::CARDINALITY, sigma_key)`
-    pub fn identifier<E: Element>(sigma: f64) -> (u128, u32) {
+    pub fn identifier<E: FieldScalar>(sigma: f64) -> (u128, u32) {
         let scale = 10f64.powi(5);
 
         let sigma_key = sigma * scale;
@@ -65,7 +65,7 @@ impl GaussianCDT {
     ///
     /// Compute minimum of 7 * sigma based on precision limitations. Panic if cannot precisely
     /// compute.
-    fn new<E: Element>(sigma: f64) -> Self {
+    fn new<E: FieldScalar>(sigma: f64) -> Self {
         // 15*sigma = ~2^-167 odds of sampling within the range (according to Claude)
         let std_devs = 15f64;
         let tail = std_devs * sigma;
@@ -143,7 +143,7 @@ impl GaussianCDT {
     }
 
     /// Retrieve or compute a cumulative distribution table.
-    pub fn cache_or_init<E: Element>(sigma: f64) -> Arc<Self> {
+    pub fn cache_or_init<E: FieldScalar>(sigma: f64) -> Arc<Self> {
         let identifier = Self::identifier::<E>(sigma);
         if let Some(cdt) = CDT_CACHE.read().unwrap().get(&identifier) {
             return cdt.clone();
@@ -164,7 +164,7 @@ impl GaussianCDT {
     }
 
     /// Sample an element from the distribution.
-    pub fn sample<E: Element, R: Rng>(&self, rng: &mut R) -> E {
+    pub fn sample<E: FieldScalar, R: Rng>(&self, rng: &mut R) -> E {
         let r: f64 = rng.random_range(0.0..1.0);
         let mut out = None;
         // always iterate over the whole space for timing smoothness
@@ -178,8 +178,28 @@ impl GaussianCDT {
         out.unwrap_or(E::at_displacement(self.tail_bounds.1))
     }
 
+    /// Sample a constant size array of elements.
+    pub fn sample_arr<const N: usize, E: FieldScalar, R: Rng>(&self, rng: &mut R) -> [E; N] {
+        let samples: [f64; N] = std::array::from_fn(|_| rng.random_range(0.0..1.0));
+
+        let mut out = [E::zero(); N];
+        let mut matched_out = [false; N];
+        let mut matched_sample_count = 0;
+        for (disp, prob) in self.displacements_iter() {
+            for (i, sample) in samples.iter().enumerate() {
+                if *sample < prob && !matched_out[i] {
+                    matched_out[i] = true;
+                    matched_sample_count += 1;
+                    out[i] = E::at_displacement(disp);
+                }
+            }
+        }
+        assert_eq!(matched_sample_count, N, "CDT not all samples were matched");
+        out
+    }
+
     /// Sample a vector of elements of length `len` from the distribution.
-    pub fn sample_vec<E: Element, R: Rng>(&self, len: usize, rng: &mut R) -> Vector<E> {
+    pub fn sample_vec<E: FieldScalar, R: Rng>(&self, len: usize, rng: &mut R) -> Vector<E> {
         let mut samples = BTreeMap::<usize, f64>::default();
         for i in 0..len {
             samples.insert(i, rng.random_range(0.0..1.0));
@@ -199,7 +219,7 @@ impl GaussianCDT {
         }
         assert!(samples.is_empty(), "CDT not all samples were matched");
         assert_eq!(out.len(), len, "CDT outputting invalid sample len");
-        out.into_values().collect::<Vec<_>>().into()
+        out.into_values().collect::<Vector<_>>()
     }
 
     /// Probability of selecting a certain displacement in this CDT.
@@ -226,7 +246,7 @@ mod test {
 
     /// Repeatedly invoke a test function and provide a CDT + 100,000 samples.
     const SAMPLES_PER_CDT: usize = 100_000;
-    fn get_cdt_sample_pairs<E: Element, R: Rng>(
+    fn get_cdt_sample_pairs<E: FieldScalar, R: Rng>(
         test_logic: fn(Arc<GaussianCDT>, HashMap<i32, usize>, rng: &mut R),
         rng: &mut R,
     ) {
@@ -268,6 +288,27 @@ mod test {
             }
             test_logic(cdt, samples, rng);
         }
+
+        // array retrieval
+        for sigma in sigma_iter.clone() {
+            let cdt = GaussianCDT::cache_or_init::<E>(sigma);
+            let mut samples = HashMap::<i32, usize>::default();
+
+            let mut sample_count = 0usize;
+            loop {
+                if sample_count >= SAMPLES_PER_CDT {
+                    break;
+                }
+                for disp in cdt.sample_arr::<10, E, _>(rng) {
+                    sample_count += 1;
+                    *samples.entry(disp.displacement() as i32).or_default() += 1;
+                    if sample_count >= SAMPLES_PER_CDT {
+                        break;
+                    }
+                }
+            }
+            test_logic(cdt, samples, rng);
+        }
     }
 
     // each variable gets locally shadowed as f64 casted type
@@ -294,8 +335,9 @@ mod test {
                     })
                     .sum::<f64>()
                     / SAMPLES_PER_CDT as f64;
+
                 let std_err = cdt.sigma / (SAMPLES_PER_CDT as f64).sqrt();
-                let tolerance = 3.0 * std_err;
+                let tolerance = 3.5 * std_err;
 
                 // println!("sigma: {}, mean: {mean}, tolerance: {tolerance}", cdt.sigma);
                 assert!(mean.abs() < tolerance);

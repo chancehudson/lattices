@@ -3,12 +3,12 @@ use crate::*;
 use anyhow::Result;
 
 #[derive(Clone, Debug)]
-pub struct LWEScalar<E: Element> {
+pub struct LWEScalar<E: FieldScalar> {
     lattice: Matrix<E>,
     commitment: Vector<E>,
 }
 
-impl<E: Element> LWEScalar<E> {
+impl<E: FieldScalar> LWEScalar<E> {
     pub fn lattice_for<R: Rng>(element_len: usize, rng: &mut R) -> Matrix<E> {
         // m value
         let height: usize = element_len * E::BIT_WIDTH;
@@ -49,7 +49,7 @@ impl<E: Element> LWEScalar<E> {
     }
 }
 
-impl<E: Element> Sub<&Self> for LWEScalar<E> {
+impl<E: FieldScalar> Sub<&Self> for LWEScalar<E> {
     type Output = Self;
     fn sub(mut self, rhs: &Self) -> Self::Output {
         self -= rhs;
@@ -57,13 +57,13 @@ impl<E: Element> Sub<&Self> for LWEScalar<E> {
     }
 }
 
-impl<E: Element> SubAssign<&Self> for LWEScalar<E> {
+impl<E: FieldScalar> SubAssign<&Self> for LWEScalar<E> {
     fn sub_assign(&mut self, rhs: &Self) {
         self.commitment -= &rhs.commitment;
     }
 }
 
-impl<E: Element> Add<&Self> for LWEScalar<E> {
+impl<E: FieldScalar> Add<&Self> for LWEScalar<E> {
     type Output = Self;
     fn add(mut self, rhs: &Self) -> Self::Output {
         self += rhs;
@@ -71,13 +71,13 @@ impl<E: Element> Add<&Self> for LWEScalar<E> {
     }
 }
 
-impl<E: Element> AddAssign<&Self> for LWEScalar<E> {
+impl<E: FieldScalar> AddAssign<&Self> for LWEScalar<E> {
     fn add_assign(&mut self, rhs: &Self) {
         self.commitment += &rhs.commitment;
     }
 }
 
-impl<E: Element> Mul<E> for LWEScalar<E> {
+impl<E: FieldScalar> Mul<E> for LWEScalar<E> {
     type Output = Self;
     fn mul(mut self, rhs: E) -> Self::Output {
         self *= rhs;
@@ -85,13 +85,13 @@ impl<E: Element> Mul<E> for LWEScalar<E> {
     }
 }
 
-impl<E: Element> MulAssign<E> for LWEScalar<E> {
+impl<E: FieldScalar> MulAssign<E> for LWEScalar<E> {
     fn mul_assign(&mut self, rhs: E) {
         self.commitment *= rhs;
     }
 }
 
-impl<E: Element> Mul<&Vector<E>> for LWEScalar<E> {
+impl<E: FieldScalar> Mul<&Vector<E>> for LWEScalar<E> {
     type Output = Self;
     fn mul(mut self, rhs: &Vector<E>) -> Self::Output {
         self *= rhs;
@@ -99,7 +99,7 @@ impl<E: Element> Mul<&Vector<E>> for LWEScalar<E> {
     }
 }
 
-impl<E: Element> MulAssign<&Vector<E>> for LWEScalar<E> {
+impl<E: FieldScalar> MulAssign<&Vector<E>> for LWEScalar<E> {
     fn mul_assign(&mut self, rhs: &Vector<E>) {
         self.commitment *= rhs;
     }
@@ -116,8 +116,8 @@ mod test {
 
         let lattice = LWEScalar::lattice_for(1, rng);
 
-        let a = Field::sample_rand(rng);
-        let b = Field::sample_rand(rng);
+        let a = Field::sample_uniform(rng);
+        let b = Field::sample_uniform(rng);
         let c = b + a;
 
         let comm_a = LWEScalar::commit(a.into(), lattice.clone(), rng);

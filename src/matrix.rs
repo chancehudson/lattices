@@ -3,13 +3,13 @@ use std::ops::IndexMut;
 use super::*;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Matrix<E: Element> {
+pub struct Matrix<E: RingElement> {
     width: usize,
     height: usize,
     entries: Vec<Vector<E>>,
 }
 
-impl<E: Element> Matrix<E> {
+impl<E: RingElement> Matrix<E> {
     pub fn zero(height: usize, width: usize) -> Self {
         Self {
             width,
@@ -21,7 +21,7 @@ impl<E: Element> Matrix<E> {
     pub fn random<R: Rng>(height: usize, width: usize, rng: &mut R) -> Self {
         let mut entries = Vec::with_capacity(height);
         for _ in 0..height {
-            entries.push(Vector::random(width, rng));
+            entries.push(Vector::sample_uniform(width, rng));
         }
         Self {
             width,
@@ -92,20 +92,20 @@ impl<E: Element> Matrix<E> {
     }
 }
 
-impl<E: Element> Index<usize> for Matrix<E> {
+impl<E: RingElement> Index<usize> for Matrix<E> {
     type Output = Vector<E>;
     fn index(&self, index: usize) -> &Self::Output {
         &self.entries[index]
     }
 }
 
-impl<E: Element> IndexMut<usize> for Matrix<E> {
+impl<E: RingElement> IndexMut<usize> for Matrix<E> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.entries[index]
     }
 }
 
-impl<E: Element> AddAssign<&Self> for Matrix<E> {
+impl<E: RingElement> AddAssign<&Self> for Matrix<E> {
     fn add_assign(&mut self, rhs: &Self) {
         assert_eq!(
             self.width, rhs.width,
@@ -123,7 +123,7 @@ impl<E: Element> AddAssign<&Self> for Matrix<E> {
     }
 }
 
-impl<E: Element> Add<&Self> for Matrix<E> {
+impl<E: RingElement> Add<&Self> for Matrix<E> {
     type Output = Self;
     fn add(mut self, rhs: &Self) -> Self::Output {
         self += rhs;
@@ -131,7 +131,7 @@ impl<E: Element> Add<&Self> for Matrix<E> {
     }
 }
 
-impl<E: Element> MulAssign<&Self> for Matrix<E> {
+impl<E: RingElement> MulAssign<&Self> for Matrix<E> {
     fn mul_assign(&mut self, rhs: &Self) {
         assert_eq!(
             self.width, rhs.width,
@@ -149,7 +149,7 @@ impl<E: Element> MulAssign<&Self> for Matrix<E> {
     }
 }
 
-impl<E: Element> Mul<&Self> for Matrix<E> {
+impl<E: RingElement> Mul<&Self> for Matrix<E> {
     type Output = Self;
     fn mul(mut self, rhs: &Self) -> Self::Output {
         self *= rhs;
@@ -157,18 +157,17 @@ impl<E: Element> Mul<&Self> for Matrix<E> {
     }
 }
 
-impl<E: Element> Mul<&Vector<E>> for Matrix<E> {
+impl<E: RingElement> Mul<&Vector<E>> for Matrix<E> {
     type Output = Vector<E>;
     fn mul(self, rhs: &Vector<E>) -> Self::Output {
         self.entries
             .into_iter()
             .map(|row| (row * rhs).into_sum())
-            .collect::<Vec<_>>()
-            .into()
+            .collect::<Vector<_>>()
     }
 }
 
-impl<E: Element> Mul<&Vector<E>> for &Matrix<E> {
+impl<E: RingElement> Mul<&Vector<E>> for &Matrix<E> {
     type Output = Vector<E>;
     fn mul(self, rhs: &Vector<E>) -> Self::Output {
         self.entries
@@ -180,8 +179,7 @@ impl<E: Element> Mul<&Vector<E>> for &Matrix<E> {
                 }
                 sum
             })
-            .collect::<Vec<_>>()
-            .into()
+            .collect::<Vector<_>>()
     }
 }
 
@@ -208,7 +206,7 @@ mod test {
 
         for s in 1..100 {
             let identity = Matrix::<Field>::identity(s);
-            let vec = Vector::random(s, &mut rng);
+            let vec = Vector::sample_uniform(s, &mut rng);
             assert_eq!(vec, &identity * &vec);
         }
     }

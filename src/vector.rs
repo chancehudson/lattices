@@ -5,13 +5,13 @@ use super::*;
 // TODO: vectors backed by abstract iterators
 // can transfer between threads to evaluate as needed
 #[derive(Debug, Clone, PartialEq)]
-pub struct Vector<E: Element> {
+pub struct Vector<E: RingElement> {
     entries: Vec<E>,
 }
 
-impl<E: Element + Element> Vector<E> {}
+impl<E: RingElement> Vector<E> {}
 
-impl<E: Element> Vector<E> {
+impl<E: RingElement> Vector<E> {
     pub fn new(len: usize) -> Self {
         Self {
             entries: vec![E::default(); len],
@@ -34,10 +34,10 @@ impl<E: Element> Vector<E> {
         out
     }
 
-    pub fn random<R: Rng>(len: usize, rng: &mut R) -> Self {
+    pub fn sample_uniform<R: Rng>(len: usize, rng: &mut R) -> Self {
         let mut entries = Vec::with_capacity(len);
         for _ in 0..len {
-            entries.push(E::sample_rand(rng));
+            entries.push(E::sample_uniform(rng));
         }
         Self { entries }
     }
@@ -63,26 +63,9 @@ impl<E: Element> Vector<E> {
     pub fn append(&mut self, mut other: Self) {
         self.entries.append(&mut other.entries);
     }
-
-    /// The l2 norm of the vector. Represents the magnitude of the vector.
-    ///
-    /// The distance of each element from zero is squared and then
-    /// summed. The square root of the sum is returned.
-    ///
-    /// `sqrt(x[0]^2 + x[1]^2 + x[2]^2 ...)`
-    pub fn norm_l2(&self) -> f64 {
-        let mut sum = 0f64;
-        for entry in &self.entries {
-            println!("{}", entry.displacement());
-            let disp = entry.displacement().pow(2).unsigned_abs();
-            assert!(disp < u64::MAX as u128);
-            sum += disp as f64;
-        }
-        sum.sqrt()
-    }
 }
 
-impl<E: Element> Display for Vector<E> {
+impl<E: RingElement> Display for Vector<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = self
             .entries
@@ -95,13 +78,13 @@ impl<E: Element> Display for Vector<E> {
     }
 }
 
-impl<E: Element> From<Vec<E>> for Vector<E> {
+impl<E: RingElement> From<Vec<E>> for Vector<E> {
     fn from(value: Vec<E>) -> Self {
         Self { entries: value }
     }
 }
 
-impl<E: Element> From<E> for Vector<E> {
+impl<E: RingElement> From<E> for Vector<E> {
     fn from(value: E) -> Self {
         Self {
             entries: vec![value],
@@ -109,7 +92,7 @@ impl<E: Element> From<E> for Vector<E> {
     }
 }
 
-impl<E: Element> IntoIterator for Vector<E> {
+impl<E: RingElement> IntoIterator for Vector<E> {
     type Item = E;
     type IntoIter = <Vec<E> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
@@ -117,7 +100,7 @@ impl<E: Element> IntoIterator for Vector<E> {
     }
 }
 
-impl<'a, E: Element> IntoIterator for &'a Vector<E> {
+impl<'a, E: RingElement> IntoIterator for &'a Vector<E> {
     type Item = &'a E;
     type IntoIter = std::slice::Iter<'a, E>;
     fn into_iter(self) -> Self::IntoIter {
@@ -125,7 +108,15 @@ impl<'a, E: Element> IntoIterator for &'a Vector<E> {
     }
 }
 
-impl<E: Element> Index<usize> for Vector<E> {
+impl<'a, E: RingElement> FromIterator<E> for Vector<E> {
+    fn from_iter<T: IntoIterator<Item = E>>(iter: T) -> Self {
+        Self {
+            entries: iter.into_iter().collect(),
+        }
+    }
+}
+
+impl<E: RingElement> Index<usize> for Vector<E> {
     type Output = E;
     fn index(&self, index: usize) -> &Self::Output {
         assert!(index < self.len(), "requested index outside of vector");
@@ -133,14 +124,14 @@ impl<E: Element> Index<usize> for Vector<E> {
     }
 }
 
-impl<E: Element> IndexMut<usize> for Vector<E> {
+impl<E: RingElement> IndexMut<usize> for Vector<E> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         assert!(index < self.len(), "requested index outside of vector");
         self.entries.get_mut(index).unwrap()
     }
 }
 
-impl<E: Element> Mul<E> for Vector<E> {
+impl<E: RingElement> Mul<E> for Vector<E> {
     type Output = Self;
     fn mul(mut self, rhs: E) -> Self::Output {
         self *= rhs;
@@ -148,7 +139,7 @@ impl<E: Element> Mul<E> for Vector<E> {
     }
 }
 
-impl<E: Element> MulAssign<E> for Vector<E> {
+impl<E: RingElement> MulAssign<E> for Vector<E> {
     fn mul_assign(&mut self, rhs: E) {
         for entry in self.entries.iter_mut() {
             *entry *= rhs;
@@ -156,7 +147,7 @@ impl<E: Element> MulAssign<E> for Vector<E> {
     }
 }
 
-impl<E: Element> Mul<&Vector<E>> for Vector<E> {
+impl<E: RingElement> Mul<&Vector<E>> for Vector<E> {
     type Output = Self;
     fn mul(mut self, rhs: &Self) -> Self::Output {
         self *= rhs;
@@ -164,7 +155,7 @@ impl<E: Element> Mul<&Vector<E>> for Vector<E> {
     }
 }
 
-impl<E: Element> MulAssign<&Vector<E>> for Vector<E> {
+impl<E: RingElement> MulAssign<&Vector<E>> for Vector<E> {
     fn mul_assign(&mut self, rhs: &Self) {
         assert_eq!(self.len(), rhs.len());
         for (i, entry) in self.entries.iter_mut().enumerate() {
@@ -173,7 +164,7 @@ impl<E: Element> MulAssign<&Vector<E>> for Vector<E> {
     }
 }
 
-impl<E: Element> AddAssign<&Self> for Vector<E> {
+impl<E: RingElement> AddAssign<&Self> for Vector<E> {
     fn add_assign(&mut self, rhs: &Self) {
         assert_eq!(self.len(), rhs.len());
         for (i, entry) in self.entries.iter_mut().enumerate() {
@@ -182,7 +173,7 @@ impl<E: Element> AddAssign<&Self> for Vector<E> {
     }
 }
 
-impl<E: Element> Add<&Self> for Vector<E> {
+impl<E: RingElement> Add<&Self> for Vector<E> {
     type Output = Self;
     fn add(mut self, rhs: &Self) -> Self::Output {
         self += rhs;
@@ -190,7 +181,7 @@ impl<E: Element> Add<&Self> for Vector<E> {
     }
 }
 
-impl<E: Element> Add<E> for Vector<E> {
+impl<E: RingElement> Add<E> for Vector<E> {
     type Output = Self;
     fn add(mut self, rhs: E) -> Self::Output {
         self += rhs;
@@ -198,7 +189,7 @@ impl<E: Element> Add<E> for Vector<E> {
     }
 }
 
-impl<E: Element> AddAssign<E> for Vector<E> {
+impl<E: RingElement> AddAssign<E> for Vector<E> {
     fn add_assign(&mut self, rhs: E) {
         for entry in self.entries.iter_mut() {
             *entry += rhs;
@@ -206,13 +197,13 @@ impl<E: Element> AddAssign<E> for Vector<E> {
     }
 }
 
-impl<E: Element> SubAssign for Vector<E> {
+impl<E: RingElement> SubAssign for Vector<E> {
     fn sub_assign(&mut self, rhs: Self) {
         *self -= &rhs;
     }
 }
 
-impl<E: Element> SubAssign<&Self> for Vector<E> {
+impl<E: RingElement> SubAssign<&Self> for Vector<E> {
     fn sub_assign(&mut self, rhs: &Self) {
         assert_eq!(self.len(), rhs.len());
         for (i, entry) in self.entries.iter_mut().enumerate() {
@@ -221,7 +212,7 @@ impl<E: Element> SubAssign<&Self> for Vector<E> {
     }
 }
 
-impl<E: Element> Sub for Vector<E> {
+impl<E: RingElement> Sub for Vector<E> {
     type Output = Self;
     fn sub(mut self, rhs: Self) -> Self::Output {
         self -= rhs;
@@ -229,24 +220,22 @@ impl<E: Element> Sub for Vector<E> {
     }
 }
 
-impl<E: Element> Sub<&Vector<E>> for Vector<E> {
+impl<E: RingElement> Sub<&Vector<E>> for Vector<E> {
     type Output = Vector<E>;
     fn sub(self, rhs: &Vector<E>) -> Self::Output {
         self.into_iter()
             .zip(rhs.iter())
             .map(|e| e.0 - *e.1)
-            .collect::<Vec<_>>()
-            .into()
+            .collect::<Vector<_>>()
     }
 }
 
-impl<E: Element> Sub<Vector<E>> for &Vector<E> {
+impl<E: RingElement> Sub<Vector<E>> for &Vector<E> {
     type Output = Vector<E>;
     fn sub(self, rhs: Vector<E>) -> Self::Output {
         self.iter()
             .zip(rhs.into_iter())
             .map(|e| *e.0 - e.1)
-            .collect::<Vec<_>>()
-            .into()
+            .collect::<Vector<_>>()
     }
 }
