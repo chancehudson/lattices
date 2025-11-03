@@ -270,11 +270,11 @@ mod test {
         }
     }
 
-    // all variables get locally shadowed as f64 casted type
-    macro_rules! all_f64 {
+    // each variable gets locally shadowed as f64 casted type
+    macro_rules! as_f64 {
         ($($name: ident),*) => {
             $(
-                let $name = $name as f64;
+                let $name = ($name).clone() as f64;
             )*
         };
     }
@@ -285,14 +285,20 @@ mod test {
         let rng = &mut rand::rng();
 
         get_cdt_sample_pairs::<Field, _>(
-            |_cdt, samples, _rng| {
-                let mut sum = 0f64;
-                for (disp, count) in samples {
-                    all_f64!(disp, count);
-                    sum += disp * count;
-                }
-                let mean = sum / SAMPLES_PER_CDT as f64;
-                assert!(mean < 0.05);
+            |cdt, samples, _rng| {
+                let mean = samples
+                    .iter()
+                    .map(|(disp, count)| {
+                        as_f64!(disp, count);
+                        disp * count
+                    })
+                    .sum::<f64>()
+                    / SAMPLES_PER_CDT as f64;
+                let std_err = cdt.sigma / (SAMPLES_PER_CDT as f64).sqrt();
+                let tolerance = 3.0 * std_err;
+
+                // println!("sigma: {}, mean: {mean}, tolerance: {tolerance}", cdt.sigma);
+                assert!(mean.abs() < tolerance);
             },
             rng,
         );
@@ -307,18 +313,18 @@ mod test {
             |cdt, samples, _rng| {
                 let mut sum = 0f64;
                 for (disp, count) in &samples {
-                    let disp = *disp;
-                    let count = *count;
-                    all_f64!(disp, count);
+                    as_f64!(disp, count);
                     sum += disp * count;
                 }
                 let mean = sum / SAMPLES_PER_CDT as f64;
-                let mut variance = 0f64;
-                for (disp, count) in samples {
-                    all_f64!(count, disp, mean);
-                    variance += count * (disp - mean).powi(2);
-                }
-                let variance = variance / SAMPLES_PER_CDT as f64;
+                let variance = samples
+                    .iter()
+                    .map(|(disp, count)| {
+                        as_f64!(count, disp, mean);
+                        count * (disp - mean).powi(2)
+                    })
+                    .sum::<f64>()
+                    / SAMPLES_PER_CDT as f64;
                 let std_dev = variance.sqrt();
                 let percent_diff = ((std_dev - cdt.sigma) / cdt.sigma).abs();
                 // measured std_dev within 1% of sigma
