@@ -2,6 +2,8 @@
 name = "lettuce"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Healthy lattice utilities over finite fields and quotient rings."
 
 [dependencies]
 log = { workspace = true }
