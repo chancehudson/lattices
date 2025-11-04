@@ -18,6 +18,27 @@ impl<const N: usize, E: FieldScalar> RingElement for Polynomial<N, E> {
 }
 
 impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
+    /// Retrieve the product of monomial factors split by the provided root of unity.
+    pub fn split_root(root: E) -> Result<Self> {
+        if root.modpow(N as u128) != E::negone() || root.modpow(2 * N as u128) != E::one() {
+            anyhow::bail!(
+                "Provided root of unity {root} does not split polynomial ring of degree {N}"
+            );
+        }
+        let mut out = Self::one();
+        let mut w = root;
+        for _ in 0..N {
+            let mut monomial = Self::from(w * E::negone());
+            monomial.coefs[1] = E::one();
+            out *= monomial;
+            w *= root * root;
+        }
+        for (i, coef) in out.coefs().enumerate() {
+            println!("coef {i}: {coef}");
+        }
+        Ok(out)
+    }
+
     /// Get an iterator over all coefficients. This iterator will always contain N+1 entries.
     pub fn coefs(&self) -> impl Iterator<Item = E> {
         self.coefs.iter().copied()
@@ -107,6 +128,14 @@ impl<const N: usize, E: FieldScalar> Default for Polynomial<N, E> {
 
 impl<const N: usize, E: FieldScalar> From<[E; N]> for Polynomial<N, E> {
     fn from(coefs: [E; N]) -> Self {
+        Self { coefs }
+    }
+}
+
+impl<const N: usize, E: FieldScalar> From<E> for Polynomial<N, E> {
+    fn from(coef: E) -> Self {
+        let mut coefs = [E::zero(); N];
+        coefs[0] = coef;
         Self { coefs }
     }
 }

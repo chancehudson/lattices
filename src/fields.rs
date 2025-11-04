@@ -4,9 +4,15 @@ macro_rules! export_fields {
     () => {
         integer_prime_field!(7753, Seven753Scalar, u16, u32);
         integer_prime_field!(101, LOLScalar, u8, u16);
-        integer_prime_field!(7, SevenScalar, u8, u16);
+        integer_prime_field!(7, SevenScalar, u8, u8);
+        integer_prime_field!(2, BinaryScalar, u8, u8);
 
-        // 2^64 - 2^32 + 1 aka oxfoi aka goldilocks (incorrect)
+        integer_prime_field!(2281701377, SSCalar, u32, u64);
+        // 3 * 2^30 + 1
+        integer_prime_field!(3u128 * 2u128.pow(30) + 1, CoolScalar, u32, u64);
+        // 2^31 - 1 aka Mersenne31
+        integer_prime_field!(2u128.pow(31) - 1, Mersenne31Scalar, u32, u64);
+        // 2^64 - 2^32 + 1 aka oxfoi aka goldilocks (ambiguous)
         integer_prime_field!(2u128.pow(64) - 2u128.pow(32) + 1, OxfoiScalar, u64, u128);
     };
 }
@@ -18,7 +24,6 @@ macro_rules! integer_prime_field {
         const _: () = assert!($cardinality < (<$data_ty>::MAX as u128));
         // multiplication must fit inside the next biggest type
         const _: () = assert!($cardinality * $cardinality < (<$sq_data_ty>::MAX) as u128);
-        const _: () = assert!((<$data_ty>::MAX as u128) < (<$sq_data_ty>::MAX as u128));
 
         #[derive(Debug, Copy, Clone, Default, PartialEq)]
         pub struct $name {

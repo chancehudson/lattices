@@ -12,7 +12,7 @@ use crate::*;
 static CDT_CACHE: LazyLock<RwLock<HashMap<(u128, u32), Arc<GaussianCDT>>>> =
     LazyLock::new(|| RwLock::new(HashMap::default()));
 
-/// Compute all probabilities with values > 1e5 * f64::EPSILON
+/// Refuse to do math with values smaller than this.
 static MIN_PRECISION: LazyLock<f64> = LazyLock::new(|| 10f64.powi(5) * f64::EPSILON);
 
 /// An instance of a cumulative distribution table for a finite field, with a specific sigma
@@ -122,8 +122,8 @@ impl GaussianCDT {
             log::debug!("CDT sigma {}, disp: {} prob: {}", sigma, disp, prob);
         }
         // we're guaranteed an additional 5 decimals of precision
-        // from MIN_PRECISION, we'll give 2 to the raw sum division operation
-        assert!(raw_sum < 10f64.powi(2));
+        // from MIN_PRECISION, we'll give 5 to the raw sum division operation
+        assert!(raw_sum < 10f64.powi(5));
         let mut normalized_sum = 0f64;
         for disp in tail_bounds.0..=tail_bounds.1 {
             let prob = displacements

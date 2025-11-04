@@ -120,6 +120,21 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
         }
     }
 
+    fn modpow(mut self, mut exp: u128) -> Self {
+        let mut out = Self::one();
+        loop {
+            if exp % 2 == 1 {
+                out *= self;
+            }
+            exp >>= 1;
+            if exp == 0 {
+                break;
+            }
+            self *= self;
+        }
+        out
+    }
+
     /// Number of bits necessary to represent an element.
     const BIT_WIDTH: usize = (Self::CARDINALITY.ilog2() + 1) as usize;
     /// Number of bytes necessary to represent an element.
