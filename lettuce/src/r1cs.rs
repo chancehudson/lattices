@@ -1,9 +1,9 @@
 use crate::*;
 
 pub struct R1CS<E: RingElement> {
-    a: Matrix<E>,
-    b: Matrix<E>,
-    c: Matrix<E>,
+    pub a: Matrix<E>,
+    pub b: Matrix<E>,
+    pub c: Matrix<E>,
 }
 
 impl<E: RingElement> R1CS<E> {
