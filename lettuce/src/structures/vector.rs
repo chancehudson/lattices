@@ -1,6 +1,7 @@
+use std::ops::Index;
 use std::ops::IndexMut;
 
-use super::*;
+use crate::*;
 
 // TODO: vectors backed by abstract iterators
 // can transfer between threads to evaluate as needed

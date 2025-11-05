@@ -1,6 +1,7 @@
+use std::ops::Index;
 use std::ops::IndexMut;
 
-use super::*;
+use crate::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<E: RingElement> {

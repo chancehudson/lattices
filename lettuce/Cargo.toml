@@ -12,3 +12,4 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 
 blake3 = "1.8.2"
+const-primes = "0"

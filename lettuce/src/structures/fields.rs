@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::sync::RwLock;
+
 use crate::*;
 
 macro_rules! export_fields {
@@ -7,7 +11,10 @@ macro_rules! export_fields {
         integer_prime_field!(7, SevenScalar, u8, u8);
         integer_prime_field!(2, BinaryScalar, u8, u8);
 
-        integer_prime_field!(2281701377, SSCalar, u32, u64);
+        // 32 bit prime with roots of unity for power of 2 cycles 2 up to 2^20
+        // 455 * 2^20 * 3^2 + 1
+        // named milli because it's ~1 million from 2^32
+        integer_prime_field!(455 * 2u128.pow(20) * 9 + 1, MilliScalar, u32, u64);
         // 3 * 2^30 + 1
         integer_prime_field!(3u128 * 2u128.pow(30) + 1, CoolScalar, u32, u64);
         // 2^31 - 1 aka Mersenne31
@@ -15,6 +22,30 @@ macro_rules! export_fields {
         // 2^64 - 2^32 + 1 aka oxfoi aka goldilocks (ambiguous)
         integer_prime_field!(2u128.pow(64) - 2u128.pow(32) + 1, OxfoiScalar, u64, u128);
     };
+}
+
+#[test]
+fn generator_test() {
+    type Field = Seven753Scalar;
+    let g = Field::generator();
+    let mut v = g;
+    for i in 0..(Field::Q - 2) {
+        assert_ne!(v, Field::one(), "{i}");
+        v *= g;
+    }
+    assert_eq!(v, Field::one());
+}
+
+#[test]
+fn unity_root_test() {
+    type Field = MilliScalar;
+    for i in 2..=1024 {
+        if let Some(r) = Field::unity_root(i) {
+            println!("root {r} exists with cycle length: {i}");
+        } else {
+            println!("root does not exist for cycle length: {i}");
+        }
+    }
 }
 
 /// Generate a scalar prime field implementation.
@@ -26,43 +57,64 @@ macro_rules! integer_prime_field {
         const _: () = assert!($cardinality * $cardinality < (<$sq_data_ty>::MAX) as u128);
 
         #[derive(Debug, Copy, Clone, Default, PartialEq)]
-        pub struct $name {
-            // absolute value of displacement
-            norm: $data_ty,
-        }
+        pub struct $name($data_ty);
 
         impl RingElement for $name {
             const CARDINALITY: u128 = $cardinality;
         }
 
-        impl FieldScalar for $name {}
+        impl FieldScalar for $name {
+            fn prime_factorization() -> impl Iterator<Item = (Self, usize)> {
+                static PRIME_FACTORIZATION: LazyLock<HashMap<u128, usize>> =
+                    LazyLock::new(|| prime_factorize($cardinality - 1));
+                PRIME_FACTORIZATION
+                    .iter()
+                    .map(|(factor, count)| (Self::from(*factor), *count))
+            }
+
+            fn generator() -> Self {
+                static GENERATOR: LazyLock<RwLock<Option<u128>>> =
+                    LazyLock::new(|| RwLock::new(None));
+                if let Some(g) = *GENERATOR.read().unwrap() {
+                    return Self::from(g);
+                }
+                let g = find_generator(
+                    Self::Q,
+                    &Self::prime_factorization()
+                        .map(|(factor, count)| (factor.into(), count))
+                        .collect::<HashMap<u128, usize>>(),
+                );
+                *GENERATOR.write().unwrap() = Some(g);
+                return g.into();
+            }
+
+            fn unity_root(len: usize) -> Option<Self> {
+                find_unity_root(len, Self::Q, Self::generator().into()).map(|v| v.into())
+            }
+        }
 
         impl From<u128> for $name {
             fn from(value: u128) -> Self {
-                Self {
-                    norm: ((value % $cardinality) as $data_ty),
-                }
+                Self((value % $cardinality) as $data_ty)
             }
         }
 
         impl Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&format!("{}", self.norm))?;
+                f.write_str(&format!("{}", self.0))?;
                 Ok(())
             }
         }
 
         impl From<$data_ty> for $name {
             fn from(value: $data_ty) -> Self {
-                Self {
-                    norm: value % $cardinality as $data_ty,
-                }
+                Self(value % $cardinality as $data_ty)
             }
         }
 
         impl Into<u128> for $name {
             fn into(self) -> u128 {
-                self.norm.into()
+                self.0.into()
             }
         }
 
@@ -76,7 +128,7 @@ macro_rules! integer_prime_field {
 
         impl AddAssign<u8> for $name {
             fn add_assign(&mut self, rhs: u8) {
-                self.norm = ((self.norm as $sq_data_ty + rhs as $sq_data_ty)
+                self.0 = ((self.0 as $sq_data_ty + rhs as $sq_data_ty)
                     % $cardinality as $sq_data_ty) as $data_ty;
             }
         }
@@ -91,7 +143,7 @@ macro_rules! integer_prime_field {
 
         impl AddAssign for $name {
             fn add_assign(&mut self, rhs: Self) {
-                self.norm = ((self.norm as $sq_data_ty + rhs.norm as $sq_data_ty)
+                self.0 = ((self.0 as $sq_data_ty + rhs.0 as $sq_data_ty)
                     % $cardinality as $sq_data_ty) as $data_ty;
             }
         }
@@ -106,8 +158,8 @@ macro_rules! integer_prime_field {
 
         impl SubAssign for $name {
             fn sub_assign(&mut self, rhs: Self) {
-                let neg_rhs = $cardinality as $data_ty - rhs.norm;
-                *self += Self { norm: neg_rhs };
+                let neg_rhs = $cardinality as $data_ty - rhs.0;
+                *self += Self(neg_rhs);
             }
         }
 
@@ -121,7 +173,7 @@ macro_rules! integer_prime_field {
 
         impl MulAssign for $name {
             fn mul_assign(&mut self, rhs: Self) {
-                self.norm = (((self.norm as $sq_data_ty) * (rhs.norm as $sq_data_ty))
+                self.0 = (((self.0 as $sq_data_ty) * (rhs.0 as $sq_data_ty))
                     % $cardinality as $sq_data_ty) as $data_ty;
             }
         }

@@ -74,77 +74,15 @@ pub struct BDLOP<const N: usize, E: FieldScalar> {
     c_2: Vector<Polynomial<N, E>>,
 }
 
-/// We want a polynomial ring and field combination that splits into a product of N monomials. This
-/// allows scalar multiplication to be packed efficiently using CRT/NTT.
-///
-/// We also need small norm elements to be invertible to ensure soundness. We can verify this
-/// algebraically, but finding a prime that fully splits and fulfills algebraic conditions for
-/// invertibility is likely impossible difficult.
-///
-/// https://eprint.iacr.org/2020/517.pdf
-/// Attema,Lyubashevsky,Seiler describe a strategy of operating a quotient ring as a combination of
-/// linear residue spaces. For example, Z[X]/X^64 + 1 can be split into 8 residue spaces each with a modulus of degree 8. Challenge vectors can be moved into each residue space by taking the remainder of division by the modulus.
-///
-/// Using this approach challenge vectors can be repeatedly tested over distinct ideals to make
-/// non-invertible elements occur with probability < 2^-160
-///
-/// TODO: ^
-fn check_params<const N: usize, E: FieldScalar>(sigma: f64) {
-    // in x^N + 1 we have x^N = -1
-    // so x^N * x^N = -1 * -1 = 1
-    // x^(N + N) = 1
-    let ident_degree = 2 * N;
-    let rem = E::CARDINALITY % ident_degree as u128;
-    if rem != 1 {
-        return;
-    }
-    assert!(
-        rem == 1,
-        "Polynomial ring does not split fully with configured field"
-    );
-    // a root of unity exists, we need to find it
-    let pow = (E::Q - 1) / (2 * N as u128);
-    // let generator;
-    let mut root = E::one();
-    for g in 2.. {
-        if g > 1000000 {
-            panic!("unable to find generator and root of unity");
-        }
-        let w = E::from(g).modpow(pow);
-        if w.modpow(N as u128) == E::negone() && w.modpow(2 * N as u128) == E::one() {
-            // our generator is g and w is our root of unity
-            println!(
-                "Q: {} degree: {N} generator: {} root: {}",
-                E::CARDINALITY,
-                g,
-                w
-            );
-            // generator = g;
-            root = w;
-            break;
-        }
-    }
-    // now check all small norm elements (within 15 * sigma) for invertibility
-    Polynomial::<N, E>::split_root(root).unwrap();
-}
-
 impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
     /// Check the parameters for safe operation.
     fn check_params() -> Result<()> {
-        // we want our N to split into N components so we can do as much scalar math as possible
-        let d = N as u32;
         // our N value must be a power of 2
         if 2usize.pow(N.ilog2()) != N {
             anyhow::bail!("BDLOP degree of polynomial ring must be a power of 2");
         }
-        // our scalar field cardinality must be congruent to 2*d + 1 (mod 4d)
-        // required for invertibility of challenge polynomials
-        let base = 4 * d;
-        let q_congr = (E::CARDINALITY % (base as u128)) as u32;
-        let d_congr = (2 * d + 1) % base;
-        if q_congr != d_congr {
-            anyhow::bail!("BDLOP scalar field must be congruent to 2*N + 1 (mod 4*N)");
-        }
+        // we don't check the field for invertibility. Instead we'll use a computational statement
+        // about invertibility during proving/verification.
         Ok(())
     }
 
@@ -339,7 +277,7 @@ mod test {
 
     #[test]
     fn bdlop_open_zk() -> Result<()> {
-        type Field = Mersenne31Scalar;
+        type Field = MilliScalar;
         const RING_DEGREE: usize = 128;
         let rng = &mut rand::rng();
         let msg_len = 1;
@@ -359,7 +297,7 @@ mod test {
 
     #[test]
     fn bdlop_open_linear_zk() -> Result<()> {
-        type Field = Mersenne31Scalar;
+        type Field = MilliScalar;
         const RING_DEGREE: usize = 512;
         let rng = &mut rand::rng();
         let msg_len = 1;
@@ -374,37 +312,6 @@ mod test {
         let zk_arg = BDLOP::try_open_linear_zk((c_a, &r_a), (c_b, &r_b), g, rng)?;
         zk_arg.verify()?;
 
-        Ok(())
-    }
-
-    #[test]
-    fn bdlop_params_check() -> Result<()> {
-        fn test<const N: usize, E: FieldScalar>() {
-            // print!("Q={}, N={N}", E::CARDINALITY);
-            check_params::<N, E>(SIGMA);
-            // match BDLOP::<N, E>::check_params() {
-            //     Ok(()) => println!(" OK"),
-            //     Err(err) => println!(" ERR | {err}"),
-            // }
-        }
-        macro_rules! all_rings {
-            ($scalar:path) => {
-                test::<16, $scalar>();
-                test::<32, $scalar>();
-                test::<64, $scalar>();
-                test::<128, $scalar>();
-                test::<256, $scalar>();
-                test::<512, $scalar>();
-                test::<1024, $scalar>();
-            };
-        }
-        all_rings!(crate::SevenScalar);
-        all_rings!(crate::OxfoiScalar);
-        all_rings!(crate::LOLScalar);
-        all_rings!(crate::Seven753Scalar);
-        all_rings!(crate::Mersenne31Scalar);
-        all_rings!(crate::CoolScalar);
-        all_rings!(crate::SSCalar);
         Ok(())
     }
 }

@@ -1,26 +1,19 @@
 mod commitments;
-mod fields;
-mod matrix;
-mod polynomial;
+mod precomputed;
 mod probability;
-mod r1cs;
-mod vector;
+mod structures;
 
 #[cfg(test)]
 mod test;
 
 pub use commitments::*;
-pub use fields::*;
-pub use matrix::*;
-pub use polynomial::*;
+pub use precomputed::*;
 pub use probability::*;
-pub use r1cs::*;
-pub use vector::*;
+pub use structures::*;
 
 use std::fmt::Display;
 use std::ops::Add;
 use std::ops::AddAssign;
-use std::ops::Index;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::ops::Sub;
@@ -77,8 +70,21 @@ pub trait RingElement:
     }
 }
 
-/// A scalar field element.
+/// A scalar field element. All `FieldScalar` are also `RingElement`.
 pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAssign<u8> {
+    /// Find a generator element. This is a primitive root of unity with
+    /// cycle length equal to Self::Q - 1
+    fn generator() -> Self;
+
+    /// Find a root of unity with a certain cycle length, if it exists.
+    fn unity_root(len: usize) -> Option<Self>;
+
+    /// Return an iterator over the prime factorization of a field element. Items are factors
+    /// paired with the number of times the factor occurs.
+    ///
+    /// e.g. prime factorization of 100 = (5, 2), (2, 2)
+    fn prime_factorization() -> impl Iterator<Item = (Self, usize)>;
+
     /// Sample from a discrete gaussian distribution with standard deviation sigma.
     ///
     /// Internally uses a statically cached cumulative distribution table (CDT). Table is
@@ -107,7 +113,7 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
     }
 
     /// Determine the displacement of an element from the zero element. In a Z_q field, if this element
-    /// is > q/2 returns the negated value of the element.
+    /// is > q/2 returns a negative value q - self.
     ///
     /// Distance is a measurement, and so not a field element.
     fn displacement(self) -> i128 /* TODO: <- i32 */ {
@@ -120,6 +126,7 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
         }
     }
 
+    /// Raise an element of the field to a power `exp`. `O(log(exp))` multiplications.
     fn modpow(mut self, mut exp: u128) -> Self {
         let mut out = Self::one();
         loop {
@@ -202,6 +209,8 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
         out
     }
 
+    /// Parse a field element from a vector of bytes. Panics if the parsed value is greater than or
+    /// equal to the field modulus.
     fn from_le_bytes<'a>(bytes: impl Iterator<Item = &'a u8>) -> Self {
         let mut v = 0u128;
         for (i, byte) in bytes.enumerate() {
