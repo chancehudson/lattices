@@ -1,4 +1,7 @@
 /// Stuff that should probably be pre-computed in production systems.
+///
+/// TODO: binary format for storing Vec<RingElement>. Use include_bytes to
+/// compile onto runtime heap static.
 use std::collections::HashMap;
 
 /// Greatest common denominator of two numbers.

@@ -19,6 +19,10 @@ impl<E: RingElement> Vector<E> {
         }
     }
 
+    pub fn get(&self, i: usize) -> Option<&E> {
+        self.entries.get(i)
+    }
+
     pub fn sum(&self) -> E {
         let mut out = E::default();
         for v in &self.entries {

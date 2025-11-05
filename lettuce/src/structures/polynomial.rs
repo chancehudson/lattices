@@ -6,18 +6,46 @@ pub struct Polynomial<const N: usize, E: FieldScalar> {
     coefs: [E; N],
 }
 
-impl<const N: usize, E: FieldScalar> RingElement for Polynomial<N, E> {
-    const CARDINALITY: u128 = E::CARDINALITY.pow(N as u32);
+#[test]
+fn polynomial_evaluate() {
+    let rng = &mut rand::rng();
+    type Field = SevenScalar;
 
-    /// Uniform randomly sample an element from the ring provided an RNG source.
-    fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
-        Self {
-            coefs: std::array::from_fn(|_| E::sample_uniform(rng)),
-        }
+    let poly = Polynomial::<64, Field>::sample_uniform(rng);
+
+    let out = poly.evaluate(Field::zero());
+    assert_eq!(out, poly.coefs().next().unwrap());
+
+    let out = poly.evaluate(Field::one());
+    assert_eq!(out, poly.coefs().sum());
+
+    let mut poly = Polynomial::<3, Field>::zero();
+    for _ in 0..1000 {
+        let x = Field::sample_uniform(rng);
+        let coef_i = rng.random_range(0..3);
+        let coef_delta = Field::sample_uniform(rng);
+        *poly.coefs_mut().skip(coef_i).next().unwrap() += coef_delta;
+        let expected: Field = poly
+            .coefs()
+            .enumerate()
+            .map(|(i, coef)| coef * x.modpow(i as u128))
+            .sum();
+        assert_eq!(expected, poly.evaluate(x));
     }
 }
 
 impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
+    /// Evaluate the polynomial at a point.
+    pub fn evaluate(&self, x: E) -> E {
+        let mut out = E::zero();
+        for (i, coef) in self.coefs().enumerate() {
+            out += coef * x.modpow(i as u128);
+        }
+        log::debug!("evaluate Z_{}, x = {x}", E::Q);
+        log::debug!("{out} = {self}");
+        out
+    }
+
     /// Retrieve the product of monomial factors split by the provided root of unity.
     pub fn split_root(root: E) -> Result<Self> {
         if root.modpow(N as u128) != E::negone() || root.modpow(2 * N as u128) != E::one() {
@@ -39,11 +67,14 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
         Ok(out)
     }
 
-    /// Get an iterator over all coefficients. This iterator will always contain N+1 entries.
+    /// Get an iterator over all coefficients.
+    ///
+    /// TODO: coefs_nonzero ?
     pub fn coefs(&self) -> impl Iterator<Item = E> {
         self.coefs.iter().copied()
     }
 
+    /// Get a mutable iterator over all coefficients.
     pub fn coefs_mut(&mut self) -> impl Iterator<Item = &mut E> {
         self.coefs.iter_mut()
     }
@@ -61,6 +92,11 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
             .sqrt()
     }
 
+    /// Sample a polynomial with coefficients in a gaussian distribution
+    /// with standard deviation `sigma`.
+    ///
+    /// Internally uses a statically cached distribution table for each stddev
+    /// initialized on first call.
     pub fn sample_gaussian<R: Rng>(sigma: f64, rng: &mut R) -> Self {
         let cdt = GaussianCDT::cache_or_init::<E>(sigma);
         Self {
@@ -118,10 +154,30 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
     }
 }
 
+impl<const N: usize, E: FieldScalar> RingElement for Polynomial<N, E> {
+    const CARDINALITY: u128 = E::CARDINALITY.pow(N as u32);
+
+    /// Uniform randomly sample an element from the ring provided an RNG source.
+    fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
+        Self {
+            coefs: std::array::from_fn(|_| E::sample_uniform(rng)),
+        }
+    }
+}
+
 impl<const N: usize, E: FieldScalar> Default for Polynomial<N, E> {
     fn default() -> Self {
         Self {
             coefs: [E::zero(); N],
+        }
+    }
+}
+
+impl<const N: usize, E: FieldScalar> From<&Vector<E>> for Polynomial<N, E> {
+    fn from(coefs: &Vector<E>) -> Self {
+        assert!(coefs.len() <= N);
+        Self {
+            coefs: std::array::from_fn(|i| coefs.get(i).copied().unwrap_or_default()),
         }
     }
 }
@@ -142,7 +198,23 @@ impl<const N: usize, E: FieldScalar> From<E> for Polynomial<N, E> {
 
 impl<const N: usize, E: FieldScalar> Display for Polynomial<N, E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("polynomial unimplemented")?;
+        let poly_str = self
+            .coefs()
+            .enumerate()
+            .filter_map(|(i, coef)| {
+                if coef.is_zero() {
+                    None
+                } else if i == 0 {
+                    Some(format!("{coef}"))
+                } else if i == 1 {
+                    Some(format!("{coef}x"))
+                } else {
+                    Some(format!("{}x^{}", coef, i))
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" + ");
+        f.write_str(&poly_str)?;
         Ok(())
     }
 }
@@ -209,6 +281,26 @@ impl<const N: usize, E: FieldScalar> MulAssign for Polynomial<N, E> {
             }
         }
         self.coefs = out.coefs;
+    }
+}
+
+impl<const N: usize, E: FieldScalar> Product for Polynomial<N, E> {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut out = Self::one();
+        for v in iter {
+            out *= v;
+        }
+        out
+    }
+}
+
+impl<const N: usize, E: FieldScalar> Sum for Polynomial<N, E> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut out = Self::zero();
+        for v in iter {
+            out += v;
+        }
+        out
     }
 }
 

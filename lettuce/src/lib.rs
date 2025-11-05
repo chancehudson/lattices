@@ -1,4 +1,6 @@
 mod commitments;
+pub(crate) mod log;
+mod ntt;
 mod precomputed;
 mod probability;
 mod structures;
@@ -7,18 +9,20 @@ mod structures;
 mod test;
 
 pub use commitments::*;
+pub use ntt::*;
 pub use precomputed::*;
 pub use probability::*;
 pub use structures::*;
 
 use std::fmt::Display;
+use std::iter::Product;
+use std::iter::Sum;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
-use std::sync::LazyLock;
 
 use anyhow::Result;
 use rand::Rng;
@@ -38,6 +42,8 @@ pub trait RingElement:
     + MulAssign
     + PartialEq
     + From<u128>
+    + Sum
+    + Product
 {
     const CARDINALITY: u128;
     const Q: u128 = Self::CARDINALITY;
@@ -71,13 +77,61 @@ pub trait RingElement:
 }
 
 /// A scalar field element. All `FieldScalar` are also `RingElement`.
-pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAssign<u8> {
+pub trait FieldScalar:
+    RingElement
+    + Into<u128>
+    + Add<u8, Output = Self>
+    + AddAssign<u8>
+    + From<i32>
+    + From<u32>
+    + From<usize>
+    + From<u64>
+{
     /// Find a generator element. This is a primitive root of unity with
-    /// cycle length equal to Self::Q - 1
+    /// cycle length equal to Self::Q - 1. Exponentiating moves through the field
+    /// in sequence ending with 1 (multiplicative identity). 0 (additive identity)
+    /// is excluded from the sequence. This is the multiplicative group Z_q^*
+    ///
+    /// in Z_3
+    /// g = generator() = 2
+    /// g * g = 1
+    /// g * g * g = 2
+    /// g * g * g * g = 2
+    /// g * g * g * g * g = 1
+    /// g^6 = 2
+    /// g^7 = 1
+    /// g^900 = 1 (maybe)
     fn generator() -> Self;
 
+    /// Compute the modular inverse of an element.
+    ///
+    /// Given x, and inverse x_i, x * x_i = 1
+    fn inverse(&self) -> Self {
+        self.modpow(Self::Q - 2)
+    }
+
     /// Find a root of unity with a certain cycle length, if it exists.
+    ///
+    /// A root of unity is a cyclic group over the field. Exponentiating by `len`
+    /// yields 1 (multiplicative identity)
+    ///
+    /// root_3 = unity_root(3)
+    ///   1 = root_3 * root_3 * root_3
     fn unity_root(len: usize) -> Option<Self>;
+
+    /// Retrieve an iterator over a root of unity with a certain cycle length.
+    /// If it exists.
+    fn unity_root_iter(len: usize) -> Option<impl Iterator<Item = Self>> {
+        let mut root = match Self::unity_root(len) {
+            Some(root) => root,
+            None => return None,
+        };
+        Some((0..len).map(move |_| {
+            let out = root;
+            root *= root;
+            out
+        }))
+    }
 
     /// Return an iterator over the prime factorization of a field element. Items are factors
     /// paired with the number of times the factor occurs.
@@ -97,7 +151,7 @@ pub trait FieldScalar: RingElement + Into<u128> + Add<u8, Output = Self> + AddAs
     /// Return the finite field element at a certain displacement.
     fn at_displacement(disp: i32) -> Self {
         if disp.abs() as u128 > Self::CARDINALITY / 2 {
-            log::error!(
+            log::info!(
                 "Attempting to initialize a displacement outside the field: {} {}",
                 disp,
                 Self::CARDINALITY

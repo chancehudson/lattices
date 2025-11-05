@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 
 use crate::*;
@@ -239,9 +240,6 @@ impl GaussianCDT {
 
 #[cfg(test)]
 mod test {
-
-    use crate::probability::chi_sq::chi_sq_95;
-
     use super::*;
 
     /// Repeatedly invoke a test function and provide a CDT + 100,000 samples.

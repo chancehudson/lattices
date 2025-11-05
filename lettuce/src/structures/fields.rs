@@ -11,9 +11,9 @@ macro_rules! export_fields {
         integer_prime_field!(7, SevenScalar, u8, u8);
         integer_prime_field!(2, BinaryScalar, u8, u8);
 
-        // 32 bit prime with roots of unity for power of 2 cycles 2 up to 2^20
+        // 32 bit prime with roots of unity for power of 2 cycles up to 2^20
         // 455 * 2^20 * 3^2 + 1
-        // named milli because it's ~1 million from 2^32
+        // named milli because it's ~1 million from 2^32 and supports NTT with 1m elements
         integer_prime_field!(455 * 2u128.pow(20) * 9 + 1, MilliScalar, u32, u64);
         // 3 * 2^30 + 1
         integer_prime_field!(3u128 * 2u128.pow(30) + 1, CoolScalar, u32, u64);
@@ -39,12 +39,14 @@ fn generator_test() {
 #[test]
 fn unity_root_test() {
     type Field = MilliScalar;
-    for i in 2..=1024 {
-        if let Some(r) = Field::unity_root(i) {
-            println!("root {r} exists with cycle length: {i}");
-        } else {
-            println!("root does not exist for cycle length: {i}");
+    for i in 1..20 {
+        let len = 2usize.pow(i);
+        let mut root = Field::unity_root(len).unwrap();
+        for v in Field::unity_root_iter(len).unwrap() {
+            assert_eq!(root, v);
+            root *= root;
         }
+        assert_eq!(root, 1.into());
     }
 }
 
@@ -65,8 +67,10 @@ macro_rules! integer_prime_field {
 
         impl FieldScalar for $name {
             fn prime_factorization() -> impl Iterator<Item = (Self, usize)> {
-                static PRIME_FACTORIZATION: LazyLock<HashMap<u128, usize>> =
-                    LazyLock::new(|| prime_factorize($cardinality - 1));
+                static PRIME_FACTORIZATION: LazyLock<HashMap<u128, usize>> = LazyLock::new(|| {
+                    log::info!("Building prime factorization for Z/{}", $cardinality);
+                    prime_factorize($cardinality - 1)
+                });
                 PRIME_FACTORIZATION
                     .iter()
                     .map(|(factor, count)| (Self::from(*factor), *count))
@@ -78,6 +82,8 @@ macro_rules! integer_prime_field {
                 if let Some(g) = *GENERATOR.read().unwrap() {
                     return Self::from(g);
                 }
+
+                log::info!("Building generator for Z/{}", Self::Q);
                 let g = find_generator(
                     Self::Q,
                     &Self::prime_factorization()
@@ -89,13 +95,8 @@ macro_rules! integer_prime_field {
             }
 
             fn unity_root(len: usize) -> Option<Self> {
+                log::info!("lettuce: unity root order {} in Z/{}", len, Self::Q);
                 find_unity_root(len, Self::Q, Self::generator().into()).map(|v| v.into())
-            }
-        }
-
-        impl From<u128> for $name {
-            fn from(value: u128) -> Self {
-                Self((value % $cardinality) as $data_ty)
             }
         }
 
@@ -106,15 +107,29 @@ macro_rules! integer_prime_field {
             }
         }
 
-        impl From<$data_ty> for $name {
-            fn from(value: $data_ty) -> Self {
-                Self(value % $cardinality as $data_ty)
-            }
-        }
-
         impl Into<u128> for $name {
             fn into(self) -> u128 {
                 self.0.into()
+            }
+        }
+
+        impl Product for $name {
+            fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+                let mut out = Self::one();
+                for v in iter {
+                    out *= v;
+                }
+                out
+            }
+        }
+
+        impl Sum for $name {
+            fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+                let mut out = Self::zero();
+                for v in iter {
+                    out += v;
+                }
+                out
             }
         }
 
@@ -175,6 +190,36 @@ macro_rules! integer_prime_field {
             fn mul_assign(&mut self, rhs: Self) {
                 self.0 = (((self.0 as $sq_data_ty) * (rhs.0 as $sq_data_ty))
                     % $cardinality as $sq_data_ty) as $data_ty;
+            }
+        }
+
+        impl From<u128> for $name {
+            fn from(value: u128) -> Self {
+                Self((value % $cardinality) as $data_ty)
+            }
+        }
+
+        impl From<i32> for $name {
+            fn from(value: i32) -> Self {
+                Self::at_displacement(value)
+            }
+        }
+
+        impl From<u32> for $name {
+            fn from(value: u32) -> Self {
+                Self((value as u128 % $cardinality) as $data_ty)
+            }
+        }
+
+        impl From<usize> for $name {
+            fn from(value: usize) -> Self {
+                Self((value as u128 % $cardinality) as $data_ty)
+            }
+        }
+
+        impl From<u64> for $name {
+            fn from(value: u64) -> Self {
+                Self((value as u128 % $cardinality) as $data_ty)
             }
         }
     };
