@@ -9,13 +9,13 @@ mod vector;
 #[cfg(test)]
 mod test;
 
-use commitments::*;
-use fields::*;
-use matrix::*;
-use polynomial::*;
-use probability::*;
-use r1cs::*;
-use vector::*;
+pub use commitments::*;
+pub use fields::*;
+pub use matrix::*;
+pub use polynomial::*;
+pub use probability::*;
+pub use r1cs::*;
+pub use vector::*;
 
 use std::fmt::Display;
 use std::ops::Add;
