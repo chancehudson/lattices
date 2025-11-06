@@ -61,8 +61,8 @@ pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(
 /// Given a vector of ring elements v and a root of unity u in a ring
 /// cardinality q. Output a vector of evaluations at points in the root of unity.
 pub fn ntt<const N: usize, E: FieldScalar>(
-    input: impl Iterator<Item = E> + ExactSizeIterator + Clone,
-) -> Result<impl Iterator<Item = E> + ExactSizeIterator + Clone> {
+    input: impl Iterator<Item = E> + ExactSizeIterator,
+) -> Result<impl Iterator<Item = E> + ExactSizeIterator> {
     assert!(input.len() == N);
     // TODO: unity root iterators, run in parallel with rayon
     // TODO: cache a root lookup table
@@ -78,18 +78,17 @@ pub fn ntt<const N: usize, E: FieldScalar>(
         root.modpow(input.len() as u128) == E::one(),
         "lettuce::ntt root of unity incorrect cycle length"
     );
+    let input_vec = input.collect::<Vector<_>>();
     Ok((0..N).map(move |k| {
-        input
-            .clone()
-            .enumerate()
-            .map(|(j, v)| v * root.modpow((k * j) as u128))
+        (0..N)
+            .map(|j| input_vec[j] * root.modpow((k * j) as u128))
             .sum::<E>()
     }))
 }
 
 pub fn intt<const N: usize, E: FieldScalar>(
-    input: impl Iterator<Item = E> + ExactSizeIterator + Clone,
-) -> Result<impl Iterator<Item = E> + ExactSizeIterator + Clone> {
+    input: impl Iterator<Item = E> + ExactSizeIterator,
+) -> Result<impl Iterator<Item = E> + ExactSizeIterator> {
     assert!(input.len() == N);
     // const N_INV =
     let root = match E::unity_root(N) {
@@ -104,11 +103,11 @@ pub fn intt<const N: usize, E: FieldScalar>(
         root.modpow(input.len() as u128) == E::one(),
         "lettuce::intt root of unity incorrect cycle length"
     );
-    let input = input.collect::<Vector<_>>();
+    let input_vec = input.collect::<Vector<_>>();
     Ok((0..N).map(move |j| {
         E::from(N).inverse()
             * (0..N)
-                .map(|k| input[k] * root.modpow((j * k) as u128).inverse())
+                .map(|k| input_vec[k] * root.modpow((j * k) as u128).inverse())
                 .sum::<E>()
     }))
 }
