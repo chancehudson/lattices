@@ -70,12 +70,12 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
     /// Get an iterator over all coefficients.
     ///
     /// TODO: coefs_nonzero ?
-    pub fn coefs(&self) -> impl Iterator<Item = E> {
+    pub fn coefs(&self) -> impl Iterator<Item = E> + ExactSizeIterator + Clone {
         self.coefs.iter().copied()
     }
 
     /// Get a mutable iterator over all coefficients.
-    pub fn coefs_mut(&mut self) -> impl Iterator<Item = &mut E> {
+    pub fn coefs_mut(&mut self) -> impl Iterator<Item = &mut E> + ExactSizeIterator {
         self.coefs.iter_mut()
     }
 

@@ -124,11 +124,15 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
     }
 
     /// Generate a BDLOP commitment to a vector of scalar elements.
+    ///
+    /// Elements will be encoded into polynomials.
     pub fn commit<R: Rng>(
-        val: Vector<Polynomial<N, E>>,
+        mut val: Vector<Polynomial<N, E>>,
         lattice: (Matrix<Polynomial<N, E>>, Matrix<Polynomial<N, E>>),
         rng: &mut R,
     ) -> (Self, Vector<Polynomial<N, E>>) {
+        // val.expand(N);
+        // val.as_slice().chunks(N).map(|)
         let (a_1, a_2) = lattice;
 
         // the secret committing to the zero component

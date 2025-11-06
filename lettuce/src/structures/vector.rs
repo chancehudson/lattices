@@ -19,6 +19,15 @@ impl<E: RingElement> Vector<E> {
         }
     }
 
+    pub fn expand(&mut self, new_len: usize) {
+        assert!(new_len >= self.entries.len());
+        self.entries.resize(new_len, E::zero());
+    }
+
+    pub fn as_slice(&self) -> &[E] {
+        &self.entries
+    }
+
     pub fn get(&self, i: usize) -> Option<&E> {
         self.entries.get(i)
     }
@@ -60,7 +69,7 @@ impl<E: RingElement> Vector<E> {
         self.entries.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &E> {
+    pub fn iter(&self) -> impl Iterator<Item = &E> + ExactSizeIterator + Clone {
         self.entries.iter()
     }
 
