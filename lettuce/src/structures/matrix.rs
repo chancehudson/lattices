@@ -93,6 +93,31 @@ impl<E: RingElement> Matrix<E> {
     }
 }
 
+impl<E: RingElement> FromIterator<Vector<E>> for Matrix<E> {
+    fn from_iter<T: IntoIterator<Item = Vector<E>>>(iter: T) -> Self {
+        let mut width = None;
+        let entries = iter
+            .into_iter()
+            .map(|row| {
+                if width.is_none() {
+                    width = Some(row.len());
+                }
+                assert_eq!(
+                    width.unwrap(),
+                    row.len(),
+                    "row length mismatch in Matrix contruction from iterator"
+                );
+                row
+            })
+            .collect::<Vec<_>>();
+        Self {
+            width: width.unwrap_or(0),
+            height: entries.len(),
+            entries,
+        }
+    }
+}
+
 impl<E: RingElement> Index<usize> for Matrix<E> {
     type Output = Vector<E>;
     fn index(&self, index: usize) -> &Self::Output {
@@ -161,6 +186,7 @@ impl<E: RingElement> Mul<&Self> for Matrix<E> {
 impl<E: RingElement> Mul<&Vector<E>> for Matrix<E> {
     type Output = Vector<E>;
     fn mul(self, rhs: &Vector<E>) -> Self::Output {
+        assert_eq!(self.width(), rhs.len());
         self.entries
             .into_iter()
             .map(|row| (row * rhs).into_sum())
@@ -171,6 +197,7 @@ impl<E: RingElement> Mul<&Vector<E>> for Matrix<E> {
 impl<E: RingElement> Mul<&Vector<E>> for &Matrix<E> {
     type Output = Vector<E>;
     fn mul(self, rhs: &Vector<E>) -> Self::Output {
+        assert_eq!(self.width(), rhs.len());
         self.entries
             .iter()
             .map(|row| {

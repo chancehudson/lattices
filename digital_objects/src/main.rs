@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     let rng = &mut rand::rng();
     let lattice = BDLOP::<64, LOLScalar>::lattice_for(1, rng);
     let val = Polynomial::sample_uniform(rng);
-    let (commitment, secret) = BDLOP::commit(val.into(), lattice, rng);
+    let (commitment, secret) = BDLOP::commit(val.into(), &lattice, rng);
     commitment.try_open(&secret).unwrap();
 
     // a root of unity exists, we need to find it

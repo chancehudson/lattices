@@ -19,9 +19,13 @@ impl<E: RingElement> Vector<E> {
         }
     }
 
-    pub fn expand(&mut self, new_len: usize) {
+    pub fn resize(&mut self, new_len: usize, val: E) {
         assert!(new_len >= self.entries.len());
-        self.entries.resize(new_len, E::zero());
+        self.entries.resize(new_len, val);
+    }
+
+    pub fn chunks(&self, len: usize) -> impl Iterator<Item = Vector<E>> {
+        self.entries.chunks(len).map(|v| Self::from(v.to_vec()))
     }
 
     pub fn as_slice(&self) -> &[E] {

@@ -10,3 +10,5 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 
 lettuce = { workspace = true }
+
+blake3 = "1.8.2"

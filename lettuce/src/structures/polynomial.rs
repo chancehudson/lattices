@@ -251,6 +251,22 @@ impl<const N: usize, E: FieldScalar> SubAssign for Polynomial<N, E> {
     }
 }
 
+impl<const N: usize, E: FieldScalar> Mul<E> for Polynomial<N, E> {
+    type Output = Self;
+    fn mul(mut self, rhs: E) -> Self::Output {
+        self *= rhs;
+        self
+    }
+}
+
+impl<const N: usize, E: FieldScalar> MulAssign<E> for Polynomial<N, E> {
+    fn mul_assign(&mut self, rhs: E) {
+        for coef in self.coefs_mut() {
+            *coef *= rhs;
+        }
+    }
+}
+
 impl<const N: usize, E: FieldScalar> Mul for Polynomial<N, E> {
     type Output = Self;
     fn mul(mut self, rhs: Self) -> Self::Output {
