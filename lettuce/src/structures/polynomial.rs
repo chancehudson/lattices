@@ -6,34 +6,6 @@ pub struct Polynomial<const N: usize, E: FieldScalar> {
     coefs: [E; N],
 }
 
-#[test]
-fn polynomial_evaluate() {
-    let rng = &mut rand::rng();
-    type Field = SevenScalar;
-
-    let poly = Polynomial::<64, Field>::sample_uniform(rng);
-
-    let out = poly.evaluate(Field::zero());
-    assert_eq!(out, poly.coefs().next().unwrap());
-
-    let out = poly.evaluate(Field::one());
-    assert_eq!(out, poly.coefs().sum());
-
-    let mut poly = Polynomial::<3, Field>::zero();
-    for _ in 0..1000 {
-        let x = Field::sample_uniform(rng);
-        let coef_i = rng.random_range(0..3);
-        let coef_delta = Field::sample_uniform(rng);
-        *poly.coefs_mut().skip(coef_i).next().unwrap() += coef_delta;
-        let expected: Field = poly
-            .coefs()
-            .enumerate()
-            .map(|(i, coef)| coef * x.modpow(i as u128))
-            .sum();
-        assert_eq!(expected, poly.evaluate(x));
-    }
-}
-
 impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
     /// Evaluate the polynomial at a point.
     pub fn evaluate(&self, x: E) -> E {
@@ -405,5 +377,33 @@ mod test {
         let p = P::sample_uniform(rng);
         assert_eq!(p * P::one(), p);
         assert_eq!(P::one() * p, p);
+    }
+
+    #[test]
+    fn polynomial_evaluate() {
+        let rng = &mut rand::rng();
+        type Field = SevenScalar;
+
+        let poly = Polynomial::<64, Field>::sample_uniform(rng);
+
+        let out = poly.evaluate(Field::zero());
+        assert_eq!(out, poly.coefs().next().unwrap());
+
+        let out = poly.evaluate(Field::one());
+        assert_eq!(out, poly.coefs().sum());
+
+        let mut poly = Polynomial::<3, Field>::zero();
+        for _ in 0..1000 {
+            let x = Field::sample_uniform(rng);
+            let coef_i = rng.random_range(0..3);
+            let coef_delta = Field::sample_uniform(rng);
+            *poly.coefs_mut().skip(coef_i).next().unwrap() += coef_delta;
+            let expected: Field = poly
+                .coefs()
+                .enumerate()
+                .map(|(i, coef)| coef * x.modpow(i as u128))
+                .sum();
+            assert_eq!(expected, poly.evaluate(x));
+        }
     }
 }
