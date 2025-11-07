@@ -185,8 +185,8 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
         let challenge = E::sample_uniform(&mut csprng);
 
-        self.wtns_arg.verify()?;
-        self.crossterm_arg.verify()?;
+        self.wtns_arg.verify(Polynomial::from(challenge))?;
+        self.crossterm_arg.verify(Polynomial::from(challenge))?;
 
         let wtns_final_commit = self.wtns_mask_commit.clone() + &self.wtns_arg.c_b;
         let wtns_e_final_commit = self.wtns_mask_e_commit.clone() + &self.crossterm_arg.c_b;
@@ -194,7 +194,7 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
 
         if self.wtns_e_final
             != (&self.r1cs.a * &self.wtns_final) * &(&self.r1cs.b * &self.wtns_final)
-                - (&self.r1cs.c * &self.wtns_final) * (E::one() + challenge)
+                - (&self.r1cs.c * &self.wtns_final) * self.wtns_s_final
         {
             anyhow::bail!("hidden_r1cs: verification failed constraint matrices are not fulfilled");
         }

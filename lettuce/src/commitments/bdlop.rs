@@ -21,7 +21,10 @@ pub struct BDLOPLinearNIZKArg<const N: usize, E: FieldScalar> {
 }
 
 impl<const N: usize, E: FieldScalar> BDLOPLinearNIZKArg<N, E> {
-    pub fn verify(&self) -> Result<()> {
+    pub fn verify(&self, g: Polynomial<N, E>) -> Result<()> {
+        if g != self.g {
+            anyhow::bail!("BDLOPLinearNIZKArg g value mismatch");
+        }
         // check z terms norm bounds
         let l2_norm_bound = 4.0 * SIGMA * (N as f64).sqrt();
         for (z_1, z_2) in self.z_1.iter().zip(self.z_2.iter()) {
@@ -341,7 +344,7 @@ mod test {
         let (c_b, r_b) = BDLOP::commit(b, &lattice, rng);
 
         let zk_arg = BDLOP::try_open_linear_zk((c_a, &r_a), (c_b, &r_b), g, rng)?;
-        zk_arg.verify()?;
+        zk_arg.verify(g)?;
 
         Ok(())
     }
