@@ -1,36 +1,31 @@
 use crate::*;
 
-pub fn intt_negacyclic<const N: usize, E: FieldScalar>(
-    input: impl Iterator<Item = E> + ExactSizeIterator,
-) -> Result<impl Iterator<Item = E> + ExactSizeIterator> {
-    assert!(input.len() == N);
-    let outer_root_inv = match E::unity_root(2 * N) {
-        Some(root) => root.inverse(),
+pub fn intt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
+    let psi = match E::unity_root(2 * N) {
+        Some(root) => root,
         None => anyhow::bail!(
             "Z/{} does not have unity root cycle of len: {}",
             E::Q,
             input.len()
         ),
     };
+
+    let psi_inv = psi.inverse();
+
+    let omega = psi.modpow(2);
+    let omega_inv = omega.inverse();
+
+    ntt_inplace::<N, E>(input, omega_inv);
+
+    // post-multiply by psi^(-j) / N
     let n_inv = E::from(N).inverse();
-    let input_vec = input.collect::<Vector<_>>();
-    let o = (0..N).map(move |j| {
-        (0..N)
-            .map(|k| {
-                let exp = (2 * k + 1) * j;
-                let root = outer_root_inv.modpow(exp as u128);
-                input_vec[k] * root
-            })
-            .sum::<E>()
-            * n_inv
-    });
-    Ok(o)
+    for (j, x) in input.iter_mut().enumerate() {
+        *x *= psi_inv.modpow(j as u128) * n_inv;
+    }
+    Ok(())
 }
 
-pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(
-    input: impl Iterator<Item = E> + ExactSizeIterator,
-) -> Result<impl Iterator<Item = E> + ExactSizeIterator> {
-    assert!(input.len() == N);
+pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     // TODO: unity root iterators, run in parallel with rayon
     // TODO: cache a root lookup table
     let outer_root = match E::unity_root(2 * N) {
@@ -41,29 +36,68 @@ pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(
             input.len()
         ),
     };
-    assert!(outer_root.modpow((2 * N) as u128) == E::one());
-    assert!(outer_root.modpow(N as u128) == E::negone());
-    let input_vec = input.collect::<Vector<_>>();
-    let o = (0..N).map(move |k| {
-        (0..N)
-            .map(|j| {
-                let exp = (2 * k + 1) * j;
-                let root = outer_root.modpow(exp as u128);
-                input_vec[j] * root
-            })
-            .sum::<E>()
-    });
-    Ok(o)
+    debug_assert!(outer_root.modpow((2 * N) as u128) == E::one());
+    debug_assert!(outer_root.modpow(N as u128) == E::negone());
+
+    for (j, x) in input.iter_mut().enumerate() {
+        *x *= outer_root.modpow(j as u128);
+    }
+
+    let omega = outer_root.modpow(2);
+
+    ntt_inplace::<N, E>(input, omega);
+
+    Ok(())
+}
+
+/// Bit-reversal permutation
+fn bit_reverse_copy<E: Copy>(a: &mut [E]) {
+    let n = a.len();
+    let log_n = n.trailing_zeros() as usize;
+
+    for i in 0..n {
+        let j = reverse_bits(i, log_n);
+        if i < j {
+            a.swap(i, j);
+        }
+    }
+}
+
+/// Reverse the bottom `bits` bits of `n`
+fn reverse_bits(mut n: usize, bits: usize) -> usize {
+    let mut result = 0;
+    for _ in 0..bits {
+        result = (result << 1) | (n & 1);
+        n >>= 1;
+    }
+    result
+}
+
+fn ntt_inplace<const N: usize, E: FieldScalar>(input: &mut [E], root: E) {
+    bit_reverse_copy(input);
+    let mut len = 2;
+    while len <= N {
+        let w_len = root.modpow((N / len) as u128);
+
+        for i in (0..N).step_by(len) {
+            let mut w = E::one();
+            for j in 0..len / 2 {
+                let u = input[i + j];
+                let v = input[i + j + len / 2] * w;
+                input[i + j] = u + v;
+                input[i + j + len / 2] = u - v;
+                w = w * w_len;
+            }
+        }
+        len *= 2;
+    }
 }
 
 /// Number theoretic transform.
 ///
 /// Given a vector of ring elements v and a root of unity u in a ring
 /// cardinality q. Output a vector of evaluations at points in the root of unity.
-pub fn ntt<const N: usize, E: FieldScalar>(
-    input: impl Iterator<Item = E> + ExactSizeIterator,
-) -> Result<impl Iterator<Item = E> + ExactSizeIterator> {
-    assert!(input.len() == N);
+pub fn ntt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     // TODO: unity root iterators, run in parallel with rayon
     // TODO: cache a root lookup table
     let root = match E::unity_root(N) {
@@ -78,19 +112,11 @@ pub fn ntt<const N: usize, E: FieldScalar>(
         root.modpow(input.len() as u128) == E::one(),
         "lettuce::ntt root of unity incorrect cycle length"
     );
-    let input_vec = input.collect::<Vector<_>>();
-    Ok((0..N).map(move |k| {
-        (0..N)
-            .map(|j| input_vec[j] * root.modpow((k * j) as u128))
-            .sum::<E>()
-    }))
+    ntt_inplace::<N, E>(input, root);
+    Ok(())
 }
 
-pub fn intt<const N: usize, E: FieldScalar>(
-    input: impl Iterator<Item = E> + ExactSizeIterator,
-) -> Result<impl Iterator<Item = E> + ExactSizeIterator> {
-    assert!(input.len() == N);
-    // const N_INV =
+pub fn intt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     let root = match E::unity_root(N) {
         Some(root) => root,
         None => anyhow::bail!(
@@ -103,13 +129,51 @@ pub fn intt<const N: usize, E: FieldScalar>(
         root.modpow(input.len() as u128) == E::one(),
         "lettuce::intt root of unity incorrect cycle length"
     );
-    let input_vec = input.collect::<Vector<_>>();
-    Ok((0..N).map(move |j| {
-        E::from(N).inverse()
-            * (0..N)
-                .map(|k| input_vec[k] * root.modpow((j * k) as u128).inverse())
-                .sum::<E>()
-    }))
+    let root_inv = root.inverse();
+    ntt_inplace::<N, E>(input, root_inv);
+    let n_inv = E::from(N).inverse();
+    for x in input {
+        *x = *x * n_inv;
+    }
+    Ok(())
+}
+
+#[test]
+fn ntt_negacyclic_roundtrip() -> Result<()> {
+    type E = MilliScalar;
+    const N: usize = 8;
+
+    let rng = &mut rand::rng();
+
+    for _ in 0..10 {
+        let mut orig = Polynomial::<N, E>::sample_uniform(rng);
+        let orig_clone = orig.clone();
+
+        ntt_negacyclic::<N, _>(orig.coefs_slice_mut())?;
+        intt_negacyclic::<N, _>(orig.coefs_slice_mut())?;
+        assert_eq!(orig, orig_clone);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn ntt_roundtrip() -> Result<()> {
+    type E = MilliScalar;
+    const N: usize = 8;
+
+    let rng = &mut rand::rng();
+
+    for _ in 0..10 {
+        let mut orig = Polynomial::<N, E>::sample_uniform(rng);
+        let orig_clone = orig.clone();
+
+        ntt::<N, _>(orig.coefs_slice_mut())?;
+        intt::<N, _>(orig.coefs_slice_mut())?;
+        assert_eq!(orig, orig_clone);
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -118,11 +182,14 @@ fn ntt_field() -> Result<()> {
     type E = MilliScalar;
     const N: usize = 64;
     for _ in 0..100 {
-        let coefs = Vector::<E>::sample_uniform(N, rng);
+        let mut poly = Polynomial::<N, _>::from(&Vector::<E>::sample_uniform(N, rng));
+        let poly_clone = poly.clone();
         let root = E::unity_root(N).unwrap();
-        for (i, eval) in ntt::<N, _>(coefs.iter().copied()).unwrap().enumerate() {
+        ntt::<N, _>(poly.coefs_slice_mut())?;
+
+        for (i, eval) in poly.coefs().enumerate() {
             // eval should be coefs evaluated at x = unity root
-            let out = Polynomial::<N, _>::from(&coefs).evaluate(root.modpow(i as u128));
+            let out = poly_clone.evaluate(root.modpow(i as u128));
             assert_eq!(eval, out);
         }
     }
@@ -135,15 +202,19 @@ fn ntt_negacyclic_mul() -> Result<()> {
     type E = MilliScalar;
     const N: usize = 64;
     for _ in 0..100 {
-        let a = Polynomial::<N, E>::sample_uniform(rng);
-        let b = Polynomial::<N, E>::sample_uniform(rng);
+        let mut a = Polynomial::<N, E>::sample_uniform(rng);
+        let mut b = Polynomial::<N, E>::sample_uniform(rng);
         let c = a * b;
 
-        let a_ntt = ntt_negacyclic::<N, _>(a.coefs())?;
-        let b_ntt = ntt_negacyclic::<N, _>(b.coefs())?;
-        let c_ntt = a_ntt.zip(b_ntt).map(|(a_v, b_v)| a_v * b_v);
-        let c_computed =
-            Polynomial::<N, E>::from(&intt_negacyclic::<N, _>(c_ntt)?.collect::<Vector<_>>());
+        ntt_negacyclic::<N, _>(a.coefs_slice_mut())?;
+        ntt_negacyclic::<N, _>(b.coefs_slice_mut())?;
+        let c_ntt = a
+            .coefs()
+            .zip(b.coefs())
+            .map(|(a_v, b_v)| a_v * b_v)
+            .collect::<Vector<_>>();
+        let mut c_computed = Polynomial::<N, _>::from(&c_ntt);
+        intt_negacyclic::<N, _>(c_computed.coefs_slice_mut())?;
         assert_eq!(c, c_computed);
     }
     Ok(())
@@ -156,11 +227,13 @@ fn intt_field() -> Result<()> {
     const N: usize = 64;
     let root = E::unity_root(N).unwrap();
     for _ in 0..100 {
-        let coefs = Vector::<E>::sample_uniform(N, rng);
-        let evals =
-            (0..N).map(|i| Polynomial::<N, E>::from(&coefs).evaluate(root.modpow(i as u128)));
-        let out = intt::<N, _>(evals).unwrap().collect::<Vector<_>>();
-        assert_eq!(out, coefs);
+        let poly = Polynomial::<N, _>::from(&Vector::<E>::sample_uniform(N, rng));
+        let evals = (0..N)
+            .map(|i| poly.evaluate(root.modpow(i as u128)))
+            .collect::<Vector<_>>();
+        let mut evals_poly = Polynomial::from(&evals);
+        intt::<N, _>(evals_poly.coefs_slice_mut())?;
+        assert_eq!(evals_poly, poly);
     }
     Ok(())
 }

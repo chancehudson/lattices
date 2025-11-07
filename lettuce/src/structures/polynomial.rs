@@ -39,6 +39,10 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
         Ok(out)
     }
 
+    pub fn coefs_slice_mut(&mut self) -> &mut [E; N] {
+        &mut self.coefs
+    }
+
     /// Get an iterator over all coefficients.
     ///
     /// TODO: coefs_nonzero ?
@@ -248,27 +252,34 @@ impl<const N: usize, E: FieldScalar> Mul for Polynomial<N, E> {
 }
 
 impl<const N: usize, E: FieldScalar> MulAssign for Polynomial<N, E> {
-    fn mul_assign(&mut self, rhs: Self) {
-        let mut out = Self::default();
-        for (deg, coef) in self.coefs().enumerate() {
-            if coef.is_zero() {
-                continue;
-            }
-            for (other_deg, other_coef) in rhs.coefs().enumerate() {
-                if other_coef.is_zero() {
-                    continue;
-                }
-                let total_deg = deg + other_deg;
-                let rem = total_deg % N;
-                let div = total_deg / N;
-                let mut out_coef = coef * other_coef;
-                if div % 2 == 1 {
-                    out_coef *= E::negone();
-                }
-                out.coefs[rem] += out_coef;
-            }
+    fn mul_assign(&mut self, mut rhs: Self) {
+        ntt_negacyclic::<N, _>(self.coefs_slice_mut()).unwrap();
+        ntt_negacyclic::<N, _>(rhs.coefs_slice_mut()).unwrap();
+        for (l, r) in self.coefs_mut().zip(rhs.coefs()) {
+            *l *= r;
         }
-        self.coefs = out.coefs;
+        intt_negacyclic(self.coefs_slice_mut()).unwrap();
+
+        // let mut out = Self::default();
+        // for (deg, coef) in self.coefs().enumerate() {
+        //     if coef.is_zero() {
+        //         continue;
+        //     }
+        //     for (other_deg, other_coef) in rhs.coefs().enumerate() {
+        //         if other_coef.is_zero() {
+        //             continue;
+        //         }
+        //         let total_deg = deg + other_deg;
+        //         let rem = total_deg % N;
+        //         let div = total_deg / N;
+        //         let mut out_coef = coef * other_coef;
+        //         if div % 2 == 1 {
+        //             out_coef *= E::negone();
+        //         }
+        //         out.coefs[rem] += out_coef;
+        //     }
+        // }
+        // self.coefs = out.coefs;
     }
 }
 

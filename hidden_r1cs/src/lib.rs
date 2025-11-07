@@ -207,9 +207,8 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
 fn commit_rand() -> Result<()> {
     let rng = &mut rand::rng();
     type E = MilliScalar;
-    const N: usize = 1024;
-    let (r1cs, wtns) = R1CS::<E>::sample_uniform(120, 192, rng);
-    let arg = HiddenR1CS::<64, _>::commit(wtns, r1cs, rng)?;
+    let (r1cs, wtns) = R1CS::<E>::sample_uniform(1024, 1024, rng);
+    let arg = HiddenR1CS::<1024, _>::commit(wtns, r1cs, rng)?;
     arg.verify()?;
 
     Ok(())

@@ -291,7 +291,7 @@ mod test {
 
     #[test]
     fn bdlop_commit_var_dimension() -> Result<()> {
-        type Field = Seven753Scalar;
+        type Field = MilliScalar;
         const RING_DEGREE: usize = 16;
         let rng = &mut rand::rng();
         // just make sure our dimensions match in matrix/vector ops
