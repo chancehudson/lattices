@@ -8,14 +8,40 @@ use crate::*;
 const CARDINALITY: u32 = 455 * 2u32.pow(20) * 9 + 1;
 const MONT: Montgomery32 = Montgomery32::new(CARDINALITY);
 
+/// Finite field of cardinality 4293918721. This is ~2^32 - 1mil (close to 32 bit boundary)
+/// Q is factored by 2^20 thus supports cyclotomic rings up to degree ~1mil.
+///
+/// This prime is referred to as "milli"
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct MilliScalarMont(u32);
 
 impl RingElement for MilliScalarMont {
     const CARDINALITY: u128 = CARDINALITY as u128;
+
+    fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
+        Self::from(rng.random::<u32>())
+    }
 }
 
 impl FieldScalar for MilliScalarMont {
+    /// Return the finite field element at a certain displacement.
+    fn at_displacement(disp: i32) -> Self {
+        if disp.unsigned_abs() > CARDINALITY / 2 {
+            log::info!(
+                "Attempting to initialize a displacement outside the field: {} {}",
+                disp,
+                Self::CARDINALITY
+            );
+            #[cfg(not(debug_assertions))]
+            panic!("refusing to use displacement outside of field in production");
+        }
+        if disp >= 0 {
+            Self::from(disp as u32)
+        } else {
+            Self::from(CARDINALITY - disp.unsigned_abs() as u32)
+        }
+    }
+
     fn prime_factorization() -> impl Iterator<Item = (Self, usize)> {
         static PRIME_FACTORIZATION: LazyLock<HashMap<u128, usize>> = LazyLock::new(|| {
             log::info!("Building prime factorization for Z/{}", CARDINALITY);

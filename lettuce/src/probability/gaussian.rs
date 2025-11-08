@@ -181,19 +181,23 @@ impl GaussianCDT {
 
     /// Sample a constant size array of elements.
     pub fn sample_arr<const N: usize, E: FieldScalar, R: Rng>(&self, rng: &mut R) -> [E; N] {
-        let samples: [f64; N] = std::array::from_fn(|_| rng.random_range(0.0..1.0));
+        let mut samples = std::array::from_fn::<f64, N, _>(|_| rng.random_range(0.0..1.0)).to_vec();
 
         let mut out = [E::zero(); N];
-        let mut matched_out = [false; N];
         let mut matched_sample_count = 0;
         for (disp, prob) in self.displacements_iter() {
-            for (i, sample) in samples.iter().enumerate() {
-                if *sample < prob && !matched_out[i] {
-                    matched_out[i] = true;
-                    matched_sample_count += 1;
-                    out[i] = E::at_displacement(disp);
-                }
-            }
+            samples = samples
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, sample)| {
+                    if sample < prob {
+                        matched_sample_count += 1;
+                        out[i] = E::at_displacement(disp);
+                        return None;
+                    }
+                    Some(sample)
+                })
+                .collect::<Vec<_>>();
         }
         assert_eq!(matched_sample_count, N, "CDT not all samples were matched");
         out

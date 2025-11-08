@@ -16,7 +16,6 @@ pub use precomputed::*;
 pub use probability::*;
 pub use structures::*;
 
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::iter::Product;
 use std::iter::Sum;
@@ -27,8 +26,6 @@ use std::ops::MulAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
 use std::sync::Arc;
-use std::sync::LazyLock;
-use std::sync::RwLock;
 
 use anyhow::Result;
 use rand::Rng;
