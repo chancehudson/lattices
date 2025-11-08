@@ -9,18 +9,18 @@ pub fn intt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Re
             input.len()
         ),
     };
+    let psi_data = E::unity_root_powers(psi, N);
+    let (_psi_inv, _psi_powers, psi_inv_powers) = psi_data.as_ref();
+    let omega = psi * psi;
+    let omega_data = E::unity_root_powers(omega, N);
+    let (_omega_inv, _omega_powers, omega_inv_powers) = omega_data.as_ref();
 
-    let psi_inv = psi.inverse();
-
-    let omega = psi.modpow(2);
-    let omega_inv = omega.inverse();
-
-    ntt_inplace::<N, E>(input, omega_inv);
+    ntt_inplace::<N, E>(input, omega_inv_powers);
 
     // post-multiply by psi^(-j) / N
     let n_inv = E::from(N).inverse();
     for (j, x) in input.iter_mut().enumerate() {
-        *x *= psi_inv.modpow(j as u128) * n_inv;
+        *x *= psi_inv_powers[j] * n_inv;
     }
     Ok(())
 }
@@ -28,7 +28,7 @@ pub fn intt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Re
 pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     // TODO: unity root iterators, run in parallel with rayon
     // TODO: cache a root lookup table
-    let outer_root = match E::unity_root(2 * N) {
+    let psi = match E::unity_root(2 * N) {
         Some(root) => root,
         None => anyhow::bail!(
             "Z/{} does not have unity root cycle of len: {}",
@@ -36,16 +36,21 @@ pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Res
             input.len()
         ),
     };
-    debug_assert!(outer_root.modpow((2 * N) as u128) == E::one());
-    debug_assert!(outer_root.modpow(N as u128) == E::negone());
+    debug_assert!(psi.modpow((2 * N) as u128) == E::one());
+    debug_assert!(psi.modpow(N as u128) == E::negone());
+
+    let psi_data = E::unity_root_powers(psi, N);
+    let (_psi_inv, psi_powers, _psi_inv_powers) = psi_data.as_ref();
 
     for (j, x) in input.iter_mut().enumerate() {
-        *x *= outer_root.modpow(j as u128);
+        *x *= psi_powers[j];
     }
 
-    let omega = outer_root.modpow(2);
+    let omega = psi * psi;
+    let omega_data = E::unity_root_powers(omega, N);
+    let (_omega_inv, omega_powers, _omega_inv_powers) = omega_data.as_ref();
 
-    ntt_inplace::<N, E>(input, omega);
+    ntt_inplace::<N, E>(input, omega_powers);
 
     Ok(())
 }
@@ -73,11 +78,12 @@ fn reverse_bits(mut n: usize, bits: usize) -> usize {
     result
 }
 
-fn ntt_inplace<const N: usize, E: FieldScalar>(input: &mut [E], root: E) {
+fn ntt_inplace<const N: usize, E: FieldScalar>(input: &mut [E], powers: &Vec<E>) {
     bit_reverse_copy(input);
     let mut len = 2;
     while len <= N {
-        let w_len = root.modpow((N / len) as u128);
+        // let w_len = root.modpow((N / len) as u128);
+        let w_len = powers[N / len];
 
         for i in (0..N).step_by(len) {
             let mut w = E::one();
@@ -112,7 +118,9 @@ pub fn ntt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
         root.modpow(input.len() as u128) == E::one(),
         "lettuce::ntt root of unity incorrect cycle length"
     );
-    ntt_inplace::<N, E>(input, root);
+    let root_data = E::unity_root_powers(root, N);
+    let (_root_inv, root_powers, _root_inv_powers) = root_data.as_ref();
+    ntt_inplace::<N, E>(input, root_powers);
     Ok(())
 }
 
@@ -129,11 +137,15 @@ pub fn intt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
         root.modpow(input.len() as u128) == E::one(),
         "lettuce::intt root of unity incorrect cycle length"
     );
-    let root_inv = root.inverse();
-    ntt_inplace::<N, E>(input, root_inv);
+
+    let root_data = E::unity_root_powers(root, N);
+    let (_root_inv, _root_powers, root_inv_powers) = root_data.as_ref();
+
+    ntt_inplace::<N, E>(input, root_inv_powers);
+
     let n_inv = E::from(N).inverse();
     for x in input {
-        *x = *x * n_inv;
+        *x *= n_inv;
     }
     Ok(())
 }

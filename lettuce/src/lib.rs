@@ -1,5 +1,6 @@
 mod commitments;
 pub(crate) mod log;
+mod montgomery;
 mod ntt;
 mod precomputed;
 mod probability;
@@ -9,11 +10,13 @@ mod structures;
 mod test;
 
 pub use commitments::*;
+pub use montgomery::*;
 pub use ntt::*;
 pub use precomputed::*;
 pub use probability::*;
 pub use structures::*;
 
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::iter::Product;
 use std::iter::Sum;
@@ -23,6 +26,9 @@ use std::ops::Mul;
 use std::ops::MulAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::RwLock;
 
 use anyhow::Result;
 use rand::Rng;
@@ -55,19 +61,19 @@ pub trait RingElement:
 
     /// Multiplicative identity.
     fn one() -> Self {
-        Self::default() + 1.into()
+        Self::from(1u128)
     }
 
     /// Multiplicatively flips a value in centered representation.
     /// Additive inverse of the multiplicative identity.
     /// (Negative one)
     fn negone() -> Self {
-        Self::zero() - Self::one()
+        Self::from(Self::Q - 1)
     }
 
     /// Additive identity.
     fn zero() -> Self {
-        Self::from(0)
+        Self::default()
     }
 
     /// Uniform randomly sample an element from the ring provided an RNG source.
@@ -83,6 +89,8 @@ pub trait FieldScalar:
     + Add<u8, Output = Self>
     + AddAssign<u8>
     + From<i32>
+    + From<u8>
+    + From<u16>
     + From<u32>
     + From<usize>
     + From<u64>
@@ -119,19 +127,7 @@ pub trait FieldScalar:
     ///   1 = root_3 * root_3 * root_3
     fn unity_root(len: usize) -> Option<Self>;
 
-    /// Retrieve an iterator over a root of unity with a certain cycle length.
-    /// If it exists.
-    fn unity_root_iter(len: usize) -> Option<impl Iterator<Item = Self>> {
-        let mut root = match Self::unity_root(len) {
-            Some(root) => root,
-            None => return None,
-        };
-        Some((0..len).map(move |_| {
-            let out = root;
-            root *= root;
-            out
-        }))
-    }
+    fn unity_root_powers(root: Self, len: usize) -> Arc<(Self, Vec<Self>, Vec<Self>)>;
 
     /// Return an iterator over the prime factorization of a field element. Items are factors
     /// paired with the number of times the factor occurs.

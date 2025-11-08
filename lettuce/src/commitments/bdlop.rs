@@ -291,7 +291,7 @@ mod test {
 
     #[test]
     fn bdlop_commit_var_dimension() -> Result<()> {
-        type Field = MilliScalar;
+        type Field = MilliScalarMont;
         const RING_DEGREE: usize = 16;
         let rng = &mut rand::rng();
         // just make sure our dimensions match in matrix/vector ops
@@ -311,7 +311,7 @@ mod test {
 
     #[test]
     fn bdlop_open_zk() -> Result<()> {
-        type Field = MilliScalar;
+        type Field = MilliScalarMont;
         const RING_DEGREE: usize = 128;
         let rng = &mut rand::rng();
         let msg_len = 1;
@@ -331,7 +331,7 @@ mod test {
 
     #[test]
     fn bdlop_open_linear_zk() -> Result<()> {
-        type Field = MilliScalar;
+        type Field = MilliScalarMont;
         const RING_DEGREE: usize = 512;
         let rng = &mut rand::rng();
         let msg_len = 1;

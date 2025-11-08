@@ -205,11 +205,24 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
 
 #[test]
 fn commit_rand() -> Result<()> {
-    let rng = &mut rand::rng();
-    type E = MilliScalar;
-    let (r1cs, wtns) = R1CS::<E>::sample_uniform(1024, 1024, rng);
+    use std::time::Instant;
+
+    let mut csprng = rand_chacha::ChaCha20Rng::from_seed(rand::random::<[u8; 32]>());
+    let rng = &mut csprng;
+    type E = MilliScalarMont;
+    let (r1cs, wtns) = R1CS::<E>::sample_uniform(8192, 8192, rng);
+    let start = Instant::now();
     let arg = HiddenR1CS::<1024, _>::commit(wtns, r1cs, rng)?;
+    println!(
+        "Generated NIZK arg for R1CS: {} ms",
+        Instant::now().duration_since(start).as_millis()
+    );
+    let start = Instant::now();
     arg.verify()?;
+    println!(
+        "Verified NIZK arg for R1CS: {} ms",
+        Instant::now().duration_since(start).as_millis()
+    );
 
     Ok(())
 }

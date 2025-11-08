@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::RwLock;
 
@@ -34,20 +35,6 @@ fn generator_test() {
         v *= g;
     }
     assert_eq!(v, Field::one());
-}
-
-#[test]
-fn unity_root_test() {
-    type Field = MilliScalar;
-    for i in 1..20 {
-        let len = 2usize.pow(i);
-        let mut root = Field::unity_root(len).unwrap();
-        for v in Field::unity_root_iter(len).unwrap() {
-            assert_eq!(root, v);
-            root *= root;
-        }
-        assert_eq!(root, 1.into());
-    }
 }
 
 /// Generate a scalar prime field implementation.
@@ -95,8 +82,38 @@ macro_rules! integer_prime_field {
             }
 
             fn unity_root(len: usize) -> Option<Self> {
+                static UNITY_ROOTS: LazyLock<RwLock<HashMap<usize, $data_ty>>> =
+                    LazyLock::new(|| RwLock::new(HashMap::default()));
+                if let Some(root) = UNITY_ROOTS.read().unwrap().get(&len) {
+                    return Some(Self::from(*root));
+                }
                 log::info!("lettuce: unity root order {} in Z/{}", len, Self::Q);
-                find_unity_root(len, Self::Q, Self::generator().into()).map(|v| v.into())
+                let root_maybe = find_unity_root(len, Self::Q, Self::generator().into());
+                if let Some(root) = root_maybe {
+                    UNITY_ROOTS.write().unwrap().insert(len, root as $data_ty);
+                    Some(Self::from(root))
+                } else {
+                    None
+                }
+            }
+
+            fn unity_root_powers(root: Self, len: usize) -> Arc<(Self, Vec<Self>, Vec<Self>)> {
+                static UNITY_ROOT_POWERS: LazyLock<
+                    RwLock<HashMap<($data_ty, usize), Arc<($name, Vec<$name>, Vec<$name>)>>>,
+                > = LazyLock::new(|| RwLock::new(HashMap::default()));
+                if let Some(v) = UNITY_ROOT_POWERS.read().unwrap().get(&(root.0, len)) {
+                    return v.clone();
+                }
+                let powers = (0..len).map(|i| root.modpow(i as u128)).collect::<Vec<_>>();
+                let root_inv = root.inverse();
+                let inv_powers = (0..len)
+                    .map(|i| root_inv.modpow(i as u128))
+                    .collect::<Vec<_>>();
+                UNITY_ROOT_POWERS
+                    .write()
+                    .unwrap()
+                    .insert((root.0, len), Arc::new((root_inv, powers, inv_powers)));
+                Self::unity_root_powers(root, len)
             }
         }
 
@@ -207,6 +224,18 @@ macro_rules! integer_prime_field {
 
         impl From<u32> for $name {
             fn from(value: u32) -> Self {
+                Self((value as u128 % $cardinality) as $data_ty)
+            }
+        }
+
+        impl From<u8> for $name {
+            fn from(value: u8) -> Self {
+                Self((value as u128 % $cardinality) as $data_ty)
+            }
+        }
+
+        impl From<u16> for $name {
+            fn from(value: u16) -> Self {
                 Self((value as u128 % $cardinality) as $data_ty)
             }
         }

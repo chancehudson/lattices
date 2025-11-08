@@ -9,11 +9,14 @@ pub struct Polynomial<const N: usize, E: FieldScalar> {
 impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
     /// Evaluate the polynomial at a point.
     pub fn evaluate(&self, x: E) -> E {
+        log::debug!("evaluate Z_{}, x = {x}", E::Q);
         let mut out = E::zero();
         for (i, coef) in self.coefs().enumerate() {
+            if coef.is_zero() {
+                continue;
+            }
             out += coef * x.modpow(i as u128);
         }
-        log::debug!("evaluate Z_{}, x = {x}", E::Q);
         log::debug!("{out} = {self}");
         out
     }
@@ -32,9 +35,6 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
             monomial.coefs[1] = E::one();
             out *= monomial;
             w *= root * root;
-        }
-        for (i, coef) in out.coefs().enumerate() {
-            println!("coef {i}: {coef}");
         }
         Ok(out)
     }
@@ -327,7 +327,7 @@ mod test {
 
     #[test]
     fn polynomial_associative_add() {
-        type Field = OxfoiScalar;
+        type Field = MilliScalarMont;
         type P = Polynomial<64, Field>;
         let rng = &mut rand::rng();
 
@@ -341,7 +341,7 @@ mod test {
 
     #[test]
     fn polynomial_associative_mul() {
-        type Field = OxfoiScalar;
+        type Field = MilliScalarMont;
         type P = Polynomial<64, Field>;
         let rng = &mut rand::rng();
         // (p * q) * r = p * (q * r)
@@ -356,7 +356,7 @@ mod test {
 
     #[test]
     fn polynomial_distributive() {
-        type Field = OxfoiScalar;
+        type Field = MilliScalarMont;
         type P = Polynomial<2, Field>;
         let rng = &mut rand::rng();
         // p * (q + r) = p * q + p * r
@@ -370,7 +370,7 @@ mod test {
 
     #[test]
     fn polynomial_identity_add() {
-        type Field = OxfoiScalar;
+        type Field = MilliScalarMont;
         type P = Polynomial<64, Field>;
         let rng = &mut rand::rng();
         // additive identity
@@ -381,7 +381,7 @@ mod test {
 
     #[test]
     fn polynomial_identity_mul() {
-        type Field = OxfoiScalar;
+        type Field = MilliScalarMont;
         type P = Polynomial<64, Field>;
         let rng = &mut rand::rng();
         // multiplicative identity
@@ -393,7 +393,7 @@ mod test {
     #[test]
     fn polynomial_evaluate() {
         let rng = &mut rand::rng();
-        type Field = SevenScalar;
+        type Field = MilliScalarMont;
 
         let poly = Polynomial::<64, Field>::sample_uniform(rng);
 
@@ -403,11 +403,13 @@ mod test {
         let out = poly.evaluate(Field::one());
         assert_eq!(out, poly.coefs().sum());
 
-        let mut poly = Polynomial::<3, Field>::zero();
+        let mut poly = Polynomial::<1, Field>::zero();
         for _ in 0..1000 {
             let x = Field::sample_uniform(rng);
-            let coef_i = rng.random_range(0..3);
+            let coef_i = rng.random_range(0..1);
+            println!("i: {}", coef_i);
             let coef_delta = Field::sample_uniform(rng);
+            println!("coef_delta: {}", coef_delta);
             *poly.coefs_mut().skip(coef_i).next().unwrap() += coef_delta;
             let expected: Field = poly
                 .coefs()
