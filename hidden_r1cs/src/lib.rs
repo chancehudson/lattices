@@ -32,20 +32,23 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
     /// polynomials for operation on the lattice. During verification we'll decode the hidden
     /// witness from a vector of polynomials to a vector of scalars.
     pub fn commit<R: Rng>(wtns: Vector<E>, r1cs: R1CS<E>, rng: &mut R) -> Result<Self> {
+        let wtns_mask = Vector::<E>::sample_uniform(wtns.len(), rng);
+        let a_wtns = &r1cs.a * &wtns;
+        let b_wtns = &r1cs.b * &wtns;
+        let c_wtns = &r1cs.c * &wtns;
+        let a_wtns_mask = &r1cs.a * &wtns_mask;
+        let b_wtns_mask = &r1cs.b * &wtns_mask;
+        let c_wtns_mask = &r1cs.c * &wtns_mask;
+        let wtns_mask_e = a_wtns_mask.clone() * &b_wtns_mask - &c_wtns_mask;
         assert!(
-            r1cs.eval(&wtns)?.is_zero(),
+            a_wtns.clone() * &b_wtns == c_wtns,
             "hidden_r1cs::commit provided r1cs is not solved"
         );
-        let wtns_mask = Vector::<E>::sample_uniform(wtns.len(), rng);
-        let wtns_mask_e = r1cs.eval(&wtns_mask)?;
         // build the cross term
-        let crossterm = (&r1cs.a * &wtns_mask) * &(&r1cs.b * &wtns)
-            + &((&r1cs.a * &wtns) * &(&r1cs.b * &wtns_mask))
-            - (&r1cs.c * &wtns)
-            - (&r1cs.c * &wtns_mask);
+        let crossterm = (a_wtns_mask * &b_wtns) + &(a_wtns * &b_wtns_mask) - &c_wtns - &c_wtns_mask;
 
         // check that our cross terms match the combined eval
-        assert!(
+        debug_assert!(
             crossterm
                 == &r1cs.eval(&(wtns.clone() + &wtns_mask))?
                     - (&r1cs.a * &wtns) * &(&r1cs.b * &wtns)
@@ -55,23 +58,23 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
         let wtns_polys = wtns
             .chunks(N)
             .map(|v| v.iter().copied().collect::<Vector<E>>())
-            .map(|v| Polynomial::<N, _>::from(&v))
+            .map(|v| Polynomial::<N, _>::from(&v).into_eval_form())
             .collect::<Vector<_>>();
         let wtns_mask_polys = wtns_mask
             .chunks(N)
             .map(|v| v.iter().copied().collect::<Vector<E>>())
-            .map(|v| Polynomial::<N, _>::from(&v))
+            .map(|v| Polynomial::<N, _>::from(&v).into_eval_form())
             .collect::<Vector<_>>();
         let crossterm_polys = crossterm
             .chunks(N)
             .map(|v| v.iter().copied().collect::<Vector<E>>())
-            .map(|v| Polynomial::<N, _>::from(&v))
+            .map(|v| Polynomial::<N, _>::from(&v).into_eval_form())
             .collect::<Vector<_>>();
 
         let wtns_mask_e_polys = wtns_mask_e
             .chunks(N)
             .map(|v| v.iter().copied().collect::<Vector<E>>())
-            .map(|v| Polynomial::<N, _>::from(&v))
+            .map(|v| Polynomial::<N, _>::from(&v).into_eval_form())
             .collect::<Vector<_>>();
 
         let wtns_lattice = BDLOP::lattice_for(wtns_mask_polys.len(), rng);

@@ -4,9 +4,33 @@ use crate::*;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Polynomial<const N: usize, E: FieldScalar> {
     coefs: [E; N],
+    is_coef_form: bool,
 }
 
 impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
+    pub fn to_eval_form(&mut self) {
+        if self.is_coef_form {
+            ntt_negacyclic(self.coefs_slice_mut()).unwrap();
+            self.is_coef_form = false;
+        }
+    }
+
+    pub fn to_coef_form(&mut self) {
+        if !self.is_coef_form {
+            intt_negacyclic(self.coefs_slice_mut()).unwrap();
+            self.is_coef_form = true;
+        }
+    }
+    pub fn into_eval_form(mut self) -> Self {
+        self.to_eval_form();
+        self
+    }
+
+    pub fn into_coef_form(mut self) -> Self {
+        self.to_coef_form();
+        self
+    }
+
     /// Evaluate the polynomial at a point.
     pub fn evaluate(&self, x: E) -> E {
         log::debug!("evaluate Z_{}, x = {x}", E::Q);
@@ -19,6 +43,20 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
         }
         log::debug!("{out} = {self}");
         out
+    }
+
+    /// Multiply a single polynomial by a vector of polynomials.
+    pub fn batch_mul(mut self, rhs: Vector<Self>) -> Vector<Self> {
+        self.to_eval_form();
+        rhs.into_iter()
+            .map(|mut v| {
+                v.to_eval_form();
+                for (l, r) in v.coefs_mut().zip(self.coefs()) {
+                    *l *= r;
+                }
+                v
+            })
+            .collect()
     }
 
     /// Retrieve the product of monomial factors split by the provided root of unity.
@@ -77,6 +115,7 @@ impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
         let cdt = GaussianCDT::cache_or_init::<E>(sigma);
         Self {
             coefs: cdt.sample_arr::<N, _, _>(rng),
+            is_coef_form: true,
         }
     }
 
@@ -137,6 +176,7 @@ impl<const N: usize, E: FieldScalar> RingElement for Polynomial<N, E> {
     fn sample_uniform<R: Rng>(rng: &mut R) -> Self {
         Self {
             coefs: std::array::from_fn(|_| E::sample_uniform(rng)),
+            is_coef_form: true,
         }
     }
 }
@@ -145,6 +185,7 @@ impl<const N: usize, E: FieldScalar> Default for Polynomial<N, E> {
     fn default() -> Self {
         Self {
             coefs: [E::zero(); N],
+            is_coef_form: true,
         }
     }
 }
@@ -154,13 +195,17 @@ impl<const N: usize, E: FieldScalar> From<&Vector<E>> for Polynomial<N, E> {
         assert!(coefs.len() <= N);
         Self {
             coefs: std::array::from_fn(|i| coefs.get(i).copied().unwrap_or_default()),
+            is_coef_form: true,
         }
     }
 }
 
 impl<const N: usize, E: FieldScalar> From<[E; N]> for Polynomial<N, E> {
     fn from(coefs: [E; N]) -> Self {
-        Self { coefs }
+        Self {
+            coefs,
+            is_coef_form: true,
+        }
     }
 }
 
@@ -168,7 +213,10 @@ impl<const N: usize, E: FieldScalar> From<E> for Polynomial<N, E> {
     fn from(coef: E) -> Self {
         let mut coefs = [E::zero(); N];
         coefs[0] = coef;
-        Self { coefs }
+        Self {
+            coefs,
+            is_coef_form: true,
+        }
     }
 }
 
@@ -204,7 +252,9 @@ impl<const N: usize, E: FieldScalar> Add for Polynomial<N, E> {
 }
 
 impl<const N: usize, E: FieldScalar> AddAssign for Polynomial<N, E> {
-    fn add_assign(&mut self, rhs: Self) {
+    fn add_assign(&mut self, mut rhs: Self) {
+        self.to_coef_form();
+        rhs.to_coef_form();
         for (self_coef, other_coef) in self.coefs_mut().zip(rhs.coefs()) {
             *self_coef += other_coef;
         }
@@ -220,7 +270,9 @@ impl<const N: usize, E: FieldScalar> Sub for Polynomial<N, E> {
 }
 
 impl<const N: usize, E: FieldScalar> SubAssign for Polynomial<N, E> {
-    fn sub_assign(&mut self, rhs: Self) {
+    fn sub_assign(&mut self, mut rhs: Self) {
+        self.to_coef_form();
+        rhs.to_coef_form();
         for (self_coef, other_coef) in self.coefs_mut().zip(rhs.coefs()) {
             *self_coef -= other_coef;
         }
@@ -230,6 +282,7 @@ impl<const N: usize, E: FieldScalar> SubAssign for Polynomial<N, E> {
 impl<const N: usize, E: FieldScalar> Mul<E> for Polynomial<N, E> {
     type Output = Self;
     fn mul(mut self, rhs: E) -> Self::Output {
+        self.to_coef_form();
         self *= rhs;
         self
     }
@@ -253,12 +306,18 @@ impl<const N: usize, E: FieldScalar> Mul for Polynomial<N, E> {
 
 impl<const N: usize, E: FieldScalar> MulAssign for Polynomial<N, E> {
     fn mul_assign(&mut self, mut rhs: Self) {
-        ntt_negacyclic::<N, _>(self.coefs_slice_mut()).unwrap();
-        ntt_negacyclic::<N, _>(rhs.coefs_slice_mut()).unwrap();
+        if self.is_coef_form {
+            ntt_negacyclic::<N, _>(self.coefs_slice_mut()).unwrap();
+        }
+        if rhs.is_coef_form {
+            ntt_negacyclic::<N, _>(rhs.coefs_slice_mut()).unwrap();
+        }
         for (l, r) in self.coefs_mut().zip(rhs.coefs()) {
             *l *= r;
         }
-        intt_negacyclic(self.coefs_slice_mut()).unwrap();
+        if self.is_coef_form {
+            intt_negacyclic(self.coefs_slice_mut()).unwrap();
+        }
 
         // let mut out = Self::default();
         // for (deg, coef) in self.coefs().enumerate() {
@@ -307,7 +366,10 @@ impl<const N: usize, E: FieldScalar> From<u128> for Polynomial<N, E> {
     fn from(value: u128) -> Self {
         let mut coefs = [E::zero(); N];
         coefs[0] = value.into();
-        Self { coefs }
+        Self {
+            coefs,
+            is_coef_form: true,
+        }
     }
 }
 

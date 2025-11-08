@@ -48,7 +48,7 @@ impl<const N: usize, E: FieldScalar> BDLOPLinearNIZKArg<N, E> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
 
         let d: Polynomial<N, E> =
-            std::array::from_fn(|_| E::at_displacement(csprng.random_range(0..2) - 1)).into();
+            std::array::from_fn(|_| BDLOP::<N, E>::ternary_sample(&mut csprng)).into();
 
         // check equalities
         if self.c_a.a_1.as_ref() * &self.z_1 != self.t_1.clone() + &(self.c_a.c_1.clone() * d) {
@@ -97,6 +97,16 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
         // we don't check the field for invertibility. Instead we'll use a computational statement
         // about invertibility during proving/verification.
         Ok(())
+    }
+
+    fn ternary_sample<R: Rng>(rng: &mut R) -> E {
+        if rng.random::<bool>() {
+            E::zero()
+        } else if rng.random::<bool>() {
+            E::one()
+        } else {
+            E::negone()
+        }
     }
 
     /// Given a message length determine the dimension of a commitment matrix.
@@ -151,15 +161,14 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
             .map(|_| {
                 let mut p = Polynomial::default();
                 for coef in p.coefs_mut() {
-                    let sample: i32 = rng.random_range(0..=2) - 1;
-                    *coef = E::at_displacement(sample);
+                    *coef = Self::ternary_sample(rng);
                 }
                 p
             })
             .collect::<Vector<_>>();
 
         let c_1 = a_1.as_ref() * &r;
-        let c_2 = a_2.as_ref() * &r + &val;
+        let c_2 = (a_2.as_ref() * &r) + &val;
 
         (Self { a_1, a_2, c_1, c_2 }, r)
     }
@@ -198,8 +207,8 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
             let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
 
             let d: Polynomial<N, E> =
-                std::array::from_fn(|_| E::at_displacement(csprng.random_range(0..2) - 1)).into();
-            let z = y.clone() + &(r.clone() * d);
+                std::array::from_fn(|_| Self::ternary_sample(&mut csprng)).into();
+            let z = y.clone() + &(d.batch_mul(r.clone()));
             // TODO: rejection sampling
             // if p.norm_l2() >= 2.0 * sigma * (self.a_1.width() as f64).sqrt() {
             //     // reject and try again
@@ -223,15 +232,16 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
         let a_2 = &c_a.a_2;
         loop {
             let y_1 = (0..a_1.width())
-                .map(|_| Polynomial::sample_gaussian(SIGMA, rng))
+                .map(|_| Polynomial::sample_gaussian(SIGMA, rng).into_eval_form())
                 .collect::<Vector<_>>();
             let y_2 = (0..a_1.width())
-                .map(|_| Polynomial::sample_gaussian(SIGMA, rng))
+                .map(|_| Polynomial::sample_gaussian(SIGMA, rng).into_eval_form())
                 .collect::<Vector<_>>();
+
             let t_1 = a_1.as_ref() * &y_1;
             let t_2 = a_1.as_ref() * &y_2;
 
-            let u = (a_2.as_ref() * &y_1) * g - a_2.as_ref() * &y_2;
+            let u = g.batch_mul(a_2.as_ref() * &y_1) - a_2.as_ref() * &y_2;
 
             let hash = blake3::hash(
                 &t_1.iter()
@@ -243,10 +253,10 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
             let mut csprng = rand_chacha::ChaCha20Rng::from_seed(hash.into());
 
             let d: Polynomial<N, E> =
-                std::array::from_fn(|_| E::at_displacement(csprng.random_range(0..2) - 1)).into();
+                std::array::from_fn(|_| Self::ternary_sample(&mut csprng)).into();
 
-            let z_1 = y_1 + &(r_a.clone() * d);
-            let z_2 = y_2 + &(r_b.clone() * d);
+            let z_1 = y_1 + &(d.batch_mul(r_a.clone()));
+            let z_2 = y_2 + &(d.batch_mul(r_b.clone()));
             // TODO: rejection sampling
             // if p.norm_l2() >= 2.0 * sigma * (self.a_1.width() as f64).sqrt() {
             //     // reject and try again
