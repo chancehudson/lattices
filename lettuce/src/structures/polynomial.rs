@@ -253,8 +253,8 @@ impl<const N: usize, E: FieldScalar> Mul for Polynomial<N, E> {
 
 impl<const N: usize, E: FieldScalar> MulAssign for Polynomial<N, E> {
     fn mul_assign(&mut self, mut rhs: Self) {
-        ntt_negacyclic::<N, _>(self.coefs_slice_mut()).unwrap();
-        ntt_negacyclic::<N, _>(rhs.coefs_slice_mut()).unwrap();
+        ntt_negacyclic_batch::<N, 2, _>(&mut [self.coefs_slice_mut(), rhs.coefs_slice_mut()])
+            .unwrap();
         for (l, r) in self.coefs_mut().zip(rhs.coefs()) {
             *l *= r;
         }

@@ -151,7 +151,13 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
             .map(|_| {
                 let mut p = Polynomial::default();
                 for coef in p.coefs_mut() {
-                    let sample: i32 = rng.random_range(0..=2) - 1;
+                    let sample: i32 = if rng.random::<bool>() {
+                        0
+                    } else if rng.random::<bool>() {
+                        1
+                    } else {
+                        -1
+                    };
                     *coef = E::at_displacement(sample);
                 }
                 p

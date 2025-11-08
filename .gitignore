@@ -2,7 +2,12 @@
 .DS_Store
 *.tmp
 *.swp
+
+# flamegraph
 flamegraph.svg
 cargo-flamegraph.trace/
+
+# samply
+profile.json
 
 

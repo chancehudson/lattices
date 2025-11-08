@@ -55,15 +55,61 @@ pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Res
     Ok(())
 }
 
-/// Bit-reversal permutation
-fn bit_reverse_copy<E: Copy>(a: &mut [E]) {
-    let n = a.len();
-    let log_n = n.trailing_zeros() as usize;
+pub fn ntt_negacyclic_batch<const N: usize, const K: usize, E: FieldScalar>(
+    input: &mut [&mut [E; N]; K],
+) -> Result<()> {
+    // TODO: unity root iterators, run in parallel with rayon
+    // TODO: cache a root lookup table
+    let psi = match E::unity_root(2 * N) {
+        Some(root) => root,
+        None => anyhow::bail!(
+            "Z/{} does not have unity root cycle of len: {}",
+            E::Q,
+            2 * N
+        ),
+    };
+    debug_assert!(psi.modpow((2 * N) as u128) == E::one());
+    debug_assert!(psi.modpow(N as u128) == E::negone());
 
-    for i in 0..n {
+    let psi_data = E::unity_root_powers(psi, N);
+    let (_psi_inv, psi_powers, _psi_inv_powers) = psi_data.as_ref();
+
+    for j in 0..N {
+        for k in 0..K {
+            input[k][j] *= psi_powers[j];
+        }
+    }
+
+    let omega = psi * psi;
+    let omega_data = E::unity_root_powers(omega, N);
+    let (_omega_inv, omega_powers, _omega_inv_powers) = omega_data.as_ref();
+
+    ntt_inplace_batch(input, omega_powers);
+
+    Ok(())
+}
+
+/// Bit-reversal permutation
+fn bit_reverse_copy<const N: usize, E: Copy>(a: &mut [E; N]) {
+    let log_n = N.trailing_zeros() as usize;
+
+    for i in 0..N {
         let j = reverse_bits(i, log_n);
         if i < j {
             a.swap(i, j);
+        }
+    }
+}
+
+fn bit_reverse_copy_batch<const N: usize, const K: usize, E: Copy>(a: &mut [&mut [E; N]; K]) {
+    let log_n = N.trailing_zeros() as usize;
+
+    for i in 0..N {
+        let j = reverse_bits(i, log_n);
+        if i < j {
+            for z in 0..K {
+                a[z].swap(i, j);
+            }
         }
     }
 }
@@ -78,21 +124,48 @@ fn reverse_bits(mut n: usize, bits: usize) -> usize {
     result
 }
 
-fn ntt_inplace<const N: usize, E: FieldScalar>(input: &mut [E], powers: &Vec<E>) {
-    bit_reverse_copy(input);
+fn ntt_inplace_batch<const N: usize, const K: usize, E: FieldScalar>(
+    outer_input: &mut [&mut [E; N]; K],
+    powers: &Vec<E>,
+) {
+    bit_reverse_copy_batch(outer_input);
     let mut len = 2;
     while len <= N {
-        // let w_len = root.modpow((N / len) as u128);
-        let w_len = powers[N / len];
+        let pow_i = N / len;
 
         for i in (0..N).step_by(len) {
             let mut w = E::one();
-            for j in 0..len / 2 {
+            let k = len / 2;
+            for j in 0..k {
+                for z in 0..K {
+                    let input = &mut outer_input[z];
+                    let u = input[i + j];
+                    let v = input[i + j + k] * w;
+                    input[i + j] = u + v;
+                    input[i + j + k] = u - v;
+                }
+                w = powers[pow_i + j * pow_i];
+            }
+        }
+        len *= 2;
+    }
+}
+
+fn ntt_inplace<const N: usize, E: FieldScalar>(input: &mut [E; N], powers: &Vec<E>) {
+    bit_reverse_copy(input);
+    let mut len = 2;
+    while len <= N {
+        let pow_i = N / len;
+
+        for i in (0..N).step_by(len) {
+            let mut w = E::one();
+            let k = len / 2;
+            for j in 0..k {
                 let u = input[i + j];
-                let v = input[i + j + len / 2] * w;
+                let v = input[i + j + k] * w;
                 input[i + j] = u + v;
-                input[i + j + len / 2] = u - v;
-                w = w * w_len;
+                input[i + j + k] = u - v;
+                w = powers[pow_i + j * pow_i];
             }
         }
         len *= 2;

@@ -32,7 +32,7 @@ impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
     /// polynomials for operation on the lattice. During verification we'll decode the hidden
     /// witness from a vector of polynomials to a vector of scalars.
     pub fn commit<R: Rng>(wtns: Vector<E>, r1cs: R1CS<E>, rng: &mut R) -> Result<Self> {
-        assert!(
+        debug_assert!(
             r1cs.eval(&wtns)?.is_zero(),
             "hidden_r1cs::commit provided r1cs is not solved"
         );
@@ -210,7 +210,7 @@ fn commit_rand() -> Result<()> {
     let mut csprng = rand_chacha::ChaCha20Rng::from_seed(rand::random::<[u8; 32]>());
     let rng = &mut csprng;
     type E = MilliScalarMont;
-    let (r1cs, wtns) = R1CS::<E>::sample_uniform(8192, 8192, rng);
+    let (r1cs, wtns) = R1CS::<E>::sample_uniform(16384, 16384, rng);
     let start = Instant::now();
     let arg = HiddenR1CS::<1024, _>::commit(wtns, r1cs, rng)?;
     println!(
