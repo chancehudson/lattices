@@ -36,7 +36,7 @@ pub struct GaussianCDT {
     /// standard deviation of the distribution
     pub sigma: f64,
     /// normalized probability paired with displacement
-    pub displacements: HashMap<i32, f64>,
+    pub displacements: BTreeMap<i32, f64>,
     /// sum of gaussian pdf evaluated over all possible output values
     /// evaluated with min 1e-5 precision
     pub normalized_sum: f64,
@@ -81,7 +81,7 @@ impl GaussianCDT {
         let mut actual_tail = tail;
         // compute a table of displacements. This table will extend to or beyond the resulting
         // tail_bounds
-        let mut displacements = HashMap::<i32, f64>::default();
+        let mut displacements = BTreeMap::<i32, f64>::default();
         log::debug!("CDT MIN_PRECISION: {}", *MIN_PRECISION);
         for disp in -tail..=tail {
             let prob_exp = (disp as f64).powi(2) / (2.0 * sigma * sigma);
@@ -165,42 +165,55 @@ impl GaussianCDT {
     }
 
     /// Sample an element from the distribution.
+    ///
+    /// Binary searches the cdt O(log(m)), m = cardinality of cdt
     pub fn sample<E: FieldScalar, R: Rng>(&self, rng: &mut R) -> E {
         let r: f64 = rng.random_range(0.0..1.0);
-        let mut out = None;
-        // always iterate over the whole space for timing smoothness
-        for (disp, prob) in self.displacements_iter() {
-            out = out.or(if r < prob {
-                Some(E::at_displacement(disp))
+        let (min_i, _) = self
+            .displacements
+            .first_key_value()
+            .expect("CDT first disp did not exist");
+        let (max_i, _) = self
+            .displacements
+            .last_key_value()
+            .expect("CDT last disp did not exist");
+        let mut i: i32 = 0;
+        let mut last_i: i32 = 0;
+        loop {
+            let l = last_i;
+            last_i = i;
+
+            let next_disp = match self.displacements.get(&i) {
+                Some(disp) => disp,
+                None => return E::at_displacement(i - 1),
+            };
+            let prev_disp = match self.displacements.get(&(i - 1)) {
+                Some(disp) => disp,
+                None => return E::at_displacement(i),
+            };
+            if &r >= next_disp {
+                if i.signum() == 0 {
+                    // base case
+                    i = max_i / 2;
+                    continue;
+                }
+                i += (l.abs_diff(i) / 2).max(1) as i32;
+            } else if &r < prev_disp {
+                if i.signum() == 0 {
+                    // base case
+                    i = min_i / 2;
+                    continue;
+                }
+                i -= (l.abs_diff(i) / 2).max(1) as i32;
             } else {
-                None
-            });
+                return E::at_displacement(i);
+            }
         }
-        out.unwrap_or(E::at_displacement(self.tail_bounds.1))
     }
 
     /// Sample a constant size array of elements.
     pub fn sample_arr<const N: usize, E: FieldScalar, R: Rng>(&self, rng: &mut R) -> [E; N] {
-        let mut samples = std::array::from_fn::<f64, N, _>(|_| rng.random_range(0.0..1.0)).to_vec();
-
-        let mut out = [E::zero(); N];
-        let mut matched_sample_count = 0;
-        for (disp, prob) in self.displacements_iter() {
-            samples = samples
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, sample)| {
-                    if sample < prob {
-                        matched_sample_count += 1;
-                        out[i] = E::at_displacement(disp);
-                        return None;
-                    }
-                    Some(sample)
-                })
-                .collect::<Vec<_>>();
-        }
-        assert_eq!(matched_sample_count, N, "CDT not all samples were matched");
-        out
+        std::array::from_fn(|_| self.sample(rng))
     }
 
     /// Sample a vector of elements of length `len` from the distribution.
@@ -342,7 +355,7 @@ mod test {
                 let tolerance = 3.5 * std_err;
 
                 // println!("sigma: {}, mean: {mean}, tolerance: {tolerance}", cdt.sigma);
-                assert!(mean.abs() < tolerance);
+                assert!(mean.abs() < tolerance, "mean: {mean}");
             },
             rng,
         );
@@ -372,7 +385,11 @@ mod test {
                 let std_dev = variance.sqrt();
                 let percent_diff = ((std_dev - cdt.sigma) / cdt.sigma).abs();
                 // measured std_dev within 1% of sigma
-                assert!(percent_diff < 0.01);
+                assert!(
+                    percent_diff < 0.01,
+                    "std_dev percent diff: {}%",
+                    percent_diff * 100.
+                );
             },
             rng,
         );
@@ -394,7 +411,10 @@ mod test {
                     }
                 }
                 // negative and positive counts within 3% diff
-                assert!((1.0 - total_neg / total_pos).abs() < 0.03);
+                assert!(
+                    (1.0 - total_neg / total_pos).abs() < 0.03,
+                    "total_neg: {total_neg} total_pos: {total_pos}"
+                );
             },
             rng,
         );
