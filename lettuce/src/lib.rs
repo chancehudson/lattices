@@ -47,6 +47,8 @@ pub trait RingElement:
     + From<u128>
     + Sum
     + Product
+    + Sync
+    + Send
 {
     const CARDINALITY: u128;
     const Q: u128 = Self::CARDINALITY;

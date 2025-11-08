@@ -735,6 +735,7 @@ dependencies = [
  "log",
  "rand",
  "rand_chacha",
+ "rayon",
 ]
 
 [[package]]

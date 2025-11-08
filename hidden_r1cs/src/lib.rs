@@ -210,7 +210,7 @@ fn commit_rand() -> Result<()> {
     let mut csprng = rand_chacha::ChaCha20Rng::from_seed(rand::random::<[u8; 32]>());
     let rng = &mut csprng;
     type E = MilliScalarMont;
-    let (r1cs, wtns) = R1CS::<E>::sample_uniform(8192, 8192, rng);
+    let (r1cs, wtns) = R1CS::<E>::sample_uniform(2 * 8192, 2 * 8192, rng);
     let start = Instant::now();
     let arg = HiddenR1CS::<1024, _>::commit(wtns, r1cs, rng)?;
     println!(

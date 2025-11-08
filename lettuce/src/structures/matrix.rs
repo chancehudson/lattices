@@ -187,10 +187,22 @@ impl<E: RingElement> Mul<&Vector<E>> for Matrix<E> {
     type Output = Vector<E>;
     fn mul(self, rhs: &Vector<E>) -> Self::Output {
         assert_eq!(self.width(), rhs.len());
-        self.entries
-            .into_iter()
-            .map(|row| (row * rhs).into_sum())
-            .collect::<Vector<_>>()
+        #[cfg(not(feature = "rayon"))]
+        {
+            self.entries
+                .into_iter()
+                .map(|row| (row * rhs).into_sum())
+                .collect::<Vector<_>>()
+        }
+        #[cfg(feature = "rayon")]
+        {
+            use rayon::prelude::*;
+            self.entries
+                .par_iter()
+                .map(|row| (row.clone() * rhs).into_sum())
+                .collect::<Vec<E>>()
+                .into()
+        }
     }
 }
 
@@ -198,16 +210,34 @@ impl<E: RingElement> Mul<&Vector<E>> for &Matrix<E> {
     type Output = Vector<E>;
     fn mul(self, rhs: &Vector<E>) -> Self::Output {
         assert_eq!(self.width(), rhs.len());
-        self.entries
-            .iter()
-            .map(|row| {
-                let mut sum = E::zero();
-                for v in row.iter().zip(rhs.iter()) {
-                    sum += *v.0 * *v.1;
-                }
-                sum
-            })
-            .collect::<Vector<_>>()
+        #[cfg(not(feature = "rayon"))]
+        {
+            self.entries
+                .iter()
+                .map(|row| {
+                    let mut sum = E::zero();
+                    for v in row.iter().zip(rhs.iter()) {
+                        sum += *v.0 * *v.1;
+                    }
+                    sum
+                })
+                .collect::<Vector<_>>()
+        }
+        #[cfg(feature = "rayon")]
+        {
+            use rayon::prelude::*;
+            self.entries
+                .par_iter()
+                .map(|row| {
+                    let mut sum = E::zero();
+                    for v in row.iter().zip(rhs.iter()) {
+                        sum += *v.0 * *v.1;
+                    }
+                    sum
+                })
+                .collect::<Vec<E>>()
+                .into()
+        }
     }
 }
 
