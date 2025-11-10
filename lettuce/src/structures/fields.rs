@@ -50,6 +50,7 @@ macro_rules! integer_prime_field {
         // multiplication must fit inside the next biggest type
         const _: () = assert!($cardinality * $cardinality < (<$sq_data_ty>::MAX) as u128);
 
+        /// Automatically generate `FieldScalar` impl.
         #[derive(Debug, Copy, Clone, Default, PartialEq)]
         pub struct $name($data_ty);
 

@@ -5,7 +5,7 @@ use criterion::*;
 use lettuce::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    type E = MilliScalar;
+    type E = MilliScalarMont;
     const N: usize = 64;
     type P = Polynomial<N, E>;
     c.bench_function("Polynomial mul", |b| {

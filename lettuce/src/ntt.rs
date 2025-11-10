@@ -1,30 +1,8 @@
 use crate::*;
 
-pub fn intt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
-    let psi = match E::unity_root(2 * N) {
-        Some(root) => root,
-        None => anyhow::bail!(
-            "Z/{} does not have unity root cycle of len: {}",
-            E::Q,
-            input.len()
-        ),
-    };
-    let psi_data = E::unity_root_powers(psi, N);
-    let (_psi_inv, _psi_powers, psi_inv_powers) = psi_data.as_ref();
-    let omega = psi * psi;
-    let omega_data = E::unity_root_powers(omega, N);
-    let (_omega_inv, _omega_powers, omega_inv_powers) = omega_data.as_ref();
-
-    ntt_inplace::<N, E>(input, omega_inv_powers);
-
-    // post-multiply by psi^(-j) / N
-    let n_inv = E::from(N).inverse();
-    for (j, x) in input.iter_mut().enumerate() {
-        *x *= psi_inv_powers[j] * n_inv;
-    }
-    Ok(())
-}
-
+/// Negacyclic number theoretic transform. Applies a number theoretic transform using a
+/// 2N'th root of unity to yield the negacyclic convolution of two vectors. This is equivalent to
+/// polynomial multiplication modulo X^N + 1
 pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     // TODO: unity root iterators, run in parallel with rayon
     // TODO: cache a root lookup table
@@ -52,6 +30,34 @@ pub fn ntt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Res
 
     ntt_inplace::<N, E>(input, omega_powers);
 
+    Ok(())
+}
+
+/// Inverse negacyclic number theoretic transform. Applies an inverse number theoretic transform using a
+/// 2N'th root of unity to convert the evaluation form of a polynomial modulo X^N + 1 back to
+/// coefficient form.
+pub fn intt_negacyclic<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
+    let psi = match E::unity_root(2 * N) {
+        Some(root) => root,
+        None => anyhow::bail!(
+            "Z/{} does not have unity root cycle of len: {}",
+            E::Q,
+            input.len()
+        ),
+    };
+    let psi_data = E::unity_root_powers(psi, N);
+    let (_psi_inv, _psi_powers, psi_inv_powers) = psi_data.as_ref();
+    let omega = psi * psi;
+    let omega_data = E::unity_root_powers(omega, N);
+    let (_omega_inv, _omega_powers, omega_inv_powers) = omega_data.as_ref();
+
+    ntt_inplace::<N, E>(input, omega_inv_powers);
+
+    // post-multiply by psi^(-j) / N
+    let n_inv = E::from(N).inverse();
+    for (j, x) in input.iter_mut().enumerate() {
+        *x *= psi_inv_powers[j] * n_inv;
+    }
     Ok(())
 }
 
@@ -101,7 +107,7 @@ fn ntt_inplace<const N: usize, E: FieldScalar>(input: &mut [E], powers: &Vec<E>)
 
 /// Number theoretic transform.
 ///
-/// Given a vector of ring elements v and a root of unity u in a ring
+/// Given a vector of ring elements v and a root of unity u in a ring of
 /// cardinality q. Output a vector of evaluations at points in the root of unity.
 pub fn ntt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     // TODO: unity root iterators, run in parallel with rayon
@@ -124,6 +130,10 @@ pub fn ntt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     Ok(())
 }
 
+/// Inverse number theoretic transform.
+///
+/// Given a vector of ring elements in evaluation form convert to a vector of elements in
+/// coefficient form.
 pub fn intt<const N: usize, E: FieldScalar>(input: &mut [E; N]) -> Result<()> {
     let root = match E::unity_root(N) {
         Some(root) => root,

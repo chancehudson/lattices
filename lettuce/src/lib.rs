@@ -13,7 +13,7 @@ mod structures;
 mod test;
 
 pub use commitments::*;
-pub use montgomery::*;
+pub(crate) use montgomery::*;
 pub use ntt::*;
 pub use precomputed::*;
 pub use probability::*;

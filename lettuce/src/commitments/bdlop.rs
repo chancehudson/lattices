@@ -69,7 +69,7 @@ impl<const N: usize, E: FieldScalar> BDLOPLinearNIZKArg<N, E> {
 }
 
 /// An implementation of Baum et. al. commitments.
-/// https://eprint.iacr.org/2016/997.pdf
+/// <https://eprint.iacr.org/2016/997.pdf>
 ///
 /// <div class="warning">The current implementation is not sound!</div>
 ///
@@ -190,7 +190,7 @@ impl<const N: usize, E: FieldScalar> BDLOP<N, E> {
 
     /// Attempt to generate a non-interactive ZK argument of opening.
     ///
-    /// Described on page 15 of https://eprint.iacr.org/2016/997.pdf
+    /// Described on page 15 of <https://eprint.iacr.org/2016/997.pdf>
     pub fn try_open_zk<R: Rng>(
         &self,
         r: &Vector<Polynomial<N, E>>,

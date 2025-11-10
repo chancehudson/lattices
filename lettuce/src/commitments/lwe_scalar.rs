@@ -4,7 +4,7 @@ use anyhow::Result;
 
 /// A toy implementation of LWE commitments. Use at your own risk.
 #[derive(Clone, Debug)]
-pub struct LWEScalar<E: FieldScalar> {
+pub(crate) struct LWEScalar<E: FieldScalar> {
     lattice: Matrix<E>,
     commitment: Vector<E>,
 }

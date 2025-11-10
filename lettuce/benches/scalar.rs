@@ -5,7 +5,7 @@ use criterion::*;
 use lettuce::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    type E = MilliScalar;
+    type E = MilliScalarMont;
     // MilliScalar::sample_uniform(rng)
     c.bench_function("MilliScalar mul", |b| {
         b.iter_batched(
