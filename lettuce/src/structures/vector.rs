@@ -5,6 +5,7 @@ use crate::*;
 
 // TODO: vectors backed by abstract iterators
 // can transfer between threads to evaluate as needed
+/// A vector of ring elements. Supports arithmetic with other vectors, matrices, and ring elements.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Vector<E: RingElement> {
     entries: Vec<E>,

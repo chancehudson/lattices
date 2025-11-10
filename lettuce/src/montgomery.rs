@@ -1,6 +1,6 @@
 /// Montgomery representation of a finite field with modulus < 2^32
 /// We hardcode types such that R is 2^32
-pub struct Montgomery32 {
+pub(crate) struct Montgomery32 {
     q: u32,
     q_inv: u32, // -q^(-1) % 2^32
     r_sq: u32,  // R^2 % q

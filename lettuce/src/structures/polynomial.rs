@@ -1,6 +1,8 @@
 use crate::*;
 
 /// Univariate polynomial in a ring with modulus X^N + 1.
+/// Accelerated with negacyclic number theoretic transforms and lazy moves between coefficient and
+/// eval representation.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Polynomial<const N: usize, E: FieldScalar> {
     coefs: [E; N],

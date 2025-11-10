@@ -1,5 +1,6 @@
 use crate::*;
 
+/// Instance of a rank 1 constraint system over a finite field or ring.
 pub struct R1CS<E: RingElement> {
     pub a: Matrix<E>,
     pub b: Matrix<E>,

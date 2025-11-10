@@ -3,6 +3,8 @@ use std::ops::IndexMut;
 
 use crate::*;
 
+/// A matrix of ring elements. Supports arithmetic with other matrices, vectors and ring elements.
+/// Supports concurrent operations with the `rayon` feature.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<E: RingElement> {
     width: usize,

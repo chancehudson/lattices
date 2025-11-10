@@ -16,7 +16,7 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
 
 /// Return a prime factor of the input, if one exists.
 /// Will overflow the stack if the input is prime.
-pub fn pollard_rho(v: u128) -> u128 {
+pub(crate) fn pollard_rho(v: u128) -> u128 {
     pollard_rho_inner(v, 2, 1)
 }
 
@@ -108,7 +108,7 @@ fn prime_factorize_test() {
     }
 }
 
-pub fn find_unity_root(len: usize, q: u128, generator: u128) -> Option<u128> {
+pub(crate) fn find_unity_root(len: usize, q: u128, generator: u128) -> Option<u128> {
     let len = len as u128;
     let div = (q - 1) / len;
     if div * len != q - 1 {
@@ -124,7 +124,7 @@ pub fn find_unity_root(len: usize, q: u128, generator: u128) -> Option<u128> {
     Some(omega)
 }
 
-pub fn find_generator(q: u128, factorization: &HashMap<u128, usize>) -> u128 {
+pub(crate) fn find_generator(q: u128, factorization: &HashMap<u128, usize>) -> u128 {
     let mut g = 2u128;
     loop {
         assert!(g < q);

@@ -71,6 +71,11 @@ impl<const N: usize, E: FieldScalar> BDLOPLinearNIZKArg<N, E> {
 /// An implementation of Baum et. al. commitments.
 /// https://eprint.iacr.org/2016/997.pdf
 ///
+/// <div class="warning">The current implementation is not sound!</div>
+///
+/// The current implementation does not argue invertibility of
+/// challenge elements. The sigma and dimension parameters
+/// have also not be analyzed for security.
 #[derive(Clone, Debug)]
 pub struct BDLOP<const N: usize, E: FieldScalar> {
     a_1: Arc<Matrix<Polynomial<N, E>>>,

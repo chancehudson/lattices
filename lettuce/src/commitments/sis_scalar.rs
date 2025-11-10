@@ -2,6 +2,8 @@ use crate::*;
 
 /// Commitments based on the short integer solution problem over a scalar field. Comitted values
 /// should be small/of low norm.
+///
+/// A toy implementation of SIS commitments. Use at your own risk.
 #[derive(Clone)]
 pub struct SISScalar<E: FieldScalar> {
     lattice: Matrix<E>,

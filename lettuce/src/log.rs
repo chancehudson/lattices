@@ -2,11 +2,8 @@
 ///
 /// This exposes a macro api identical to the public api of `log`.
 /// Use log::info!(), log::error!(), etc as normal
-pub use crate::debug;
-pub use crate::error;
-pub use crate::info;
 #[cfg(test)]
-pub use test::SETUP;
+pub(crate) use test::SETUP;
 
 #[cfg(test)]
 mod test {
@@ -21,7 +18,6 @@ mod test {
 
 pub(crate) const PREFIX: &'static str = "🐰🥬 ";
 
-#[macro_export]
 macro_rules! error {
     ($($input:expr),*) => {
         #[cfg(test)]
@@ -30,7 +26,6 @@ macro_rules! error {
     };
 }
 
-#[macro_export]
 macro_rules! info {
     ($($input:expr),*) => {
         #[cfg(test)]
@@ -39,7 +34,6 @@ macro_rules! info {
     };
 }
 
-#[macro_export]
 macro_rules! debug {
     ($($input:expr),*) => {
         #[cfg(test)]
@@ -47,3 +41,7 @@ macro_rules! debug {
         log_ext::debug!("{}{}", crate::log::PREFIX, format!($($input,)*));
     };
 }
+
+pub(crate) use debug;
+pub(crate) use error;
+pub(crate) use info;

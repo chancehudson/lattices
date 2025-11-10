@@ -1,3 +1,6 @@
+//! Lettuce, the healthy lattice prover.
+//!
+
 mod commitments;
 pub(crate) mod log;
 mod montgomery;

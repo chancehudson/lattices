@@ -37,7 +37,12 @@ fn generator_test() {
     assert_eq!(v, Field::one());
 }
 
-/// Generate a scalar prime field implementation.
+/// Generate a scalar prime field implementation backed by a type.
+///
+/// First argument is cardinality of the field (must be prime). Second argument is the type used to
+/// store field elements. Third argument is type used to store multiplication of two field
+/// elements.
+#[macro_export]
 macro_rules! integer_prime_field {
     ($cardinality:expr, $name:ident, $data_ty:ty, $sq_data_ty:ty) => {
         // cardinality must fit in data type
