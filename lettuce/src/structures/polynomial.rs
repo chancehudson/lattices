@@ -12,14 +12,14 @@ pub struct Polynomial<const N: usize, E: FieldScalar> {
 impl<const N: usize, E: FieldScalar> Polynomial<N, E> {
     pub fn to_eval_form(&mut self) {
         if self.is_coef_form {
-            ntt_negacyclic(self.coefs_slice_mut()).unwrap();
+            ntt_negacyclic(self.coefs_slice_mut());
             self.is_coef_form = false;
         }
     }
 
     pub fn to_coef_form(&mut self) {
         if !self.is_coef_form {
-            intt_negacyclic(self.coefs_slice_mut()).unwrap();
+            intt_negacyclic(self.coefs_slice_mut());
             self.is_coef_form = true;
         }
     }
@@ -309,16 +309,16 @@ impl<const N: usize, E: FieldScalar> Mul for Polynomial<N, E> {
 impl<const N: usize, E: FieldScalar> MulAssign for Polynomial<N, E> {
     fn mul_assign(&mut self, mut rhs: Self) {
         if self.is_coef_form {
-            ntt_negacyclic::<N, _>(self.coefs_slice_mut()).unwrap();
+            ntt_negacyclic::<N, _>(self.coefs_slice_mut());
         }
         if rhs.is_coef_form {
-            ntt_negacyclic::<N, _>(rhs.coefs_slice_mut()).unwrap();
+            ntt_negacyclic::<N, _>(rhs.coefs_slice_mut());
         }
         for (l, r) in self.coefs_mut().zip(rhs.coefs()) {
             *l *= r;
         }
         if self.is_coef_form {
-            intt_negacyclic(self.coefs_slice_mut()).unwrap();
+            intt_negacyclic(self.coefs_slice_mut());
         }
 
         // let mut out = Self::default();
