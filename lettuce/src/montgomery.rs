@@ -44,11 +44,10 @@ impl Montgomery32 {
             reduced < 2 * (self.q as u64),
             "Montgomery reduced value is too large"
         );
-        loop {
-            if reduced < self.q as u64 {
-                return reduced as u32;
-            }
-            reduced -= self.q as u64;
+        if let Some(out) = reduced.checked_sub(self.q as u64) {
+            out as u32
+        } else {
+            reduced as u32
         }
     }
 
@@ -80,8 +79,8 @@ impl Montgomery32 {
             return a;
         }
         let sum = a as u64 + b as u64;
-        if sum >= self.q as u64 {
-            (sum - self.q as u64) as u32
+        if let Some(out) = sum.checked_sub(self.q as u64) {
+            out as u32
         } else {
             sum as u32
         }
