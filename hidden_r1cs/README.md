@@ -4,14 +4,51 @@ First consider blindfold: [blindfoldzkp.github.io/slide22.html](https://blindfol
 
 The notation in the link is slightly inconsistent, but we have the following structures:
 
-- `AwBw = Cw`: R1CS. `A`, `B`, `C` are matrices with `m` rows and `n` columns. `m =` number of constraints. `n =` number of variables. `w = ` witness (aka program variables).
-- `AwBw = sCw - E`: Relaxed R1CS (aka RR1CS aka R3CS). As above. `s =` scalar variable, `E = ` vector of dimension `m`.
+- R1CS: $\textbf{AwBw} = \textbf{Cw}$ with $\textbf{A}, \textbf{B}, \textbf{C} \in \mathbb{Z}_q^{m \times n}$ and $\textbf{w} \in \mathbb{Z}_q^n$ with $m$ constraints and $n$ variables.
+- Relaxed R1CS (aka R3CS): $\textbf{AwBw} = s\textbf{Cw} + \textbf{e}$. As above. $s \in \mathbb{Z}_q$, $\textbf{e} \in \mathbb{Z}_q^m$.
 
-Relaxed R1CS adds a constraint to the consistency of the system itself. A scalar constraint on the witness is, in some cases, an effective way to constrain a witness. Consider the case where variables are relatively independent, breaking a 32 bit scalar constraint may be < 2^50 work. However, this can be accounted for at the arithmetization level by adding non-sparse safety constraints.
+Relaxed R1CS adds a constraint to the consistency of the system itself. A scalar constraint on the witness is, in some cases, an effective way to constrain a witness. However consider the case where variables are relatively independent. Breaking a 32 bit scalar constraint may be < 2^50 work. This can be accounted for at the arithmetization level by adding non-sparse safety constraints.
 
-A vector of safety constraints may be introduced. Each constraint is a vector containing non-identity scalars. The vector is appended to the R1CS `A` and `C` matrices, and a zero vector is appended to the `B` matrix.
+Each safety constraint is a vector containing non-identity scalars. The vector is appended as a row to the R1CS $\textbf{A}$ and $\textbf{C}$ matrices, and a vector with a single $1$ followed by $m - 1$ trailing $0$'s is appended to the $\textbf{B}$ matrix.
 
 Indeed this can be applied to sparse R1CS instances by ensuring some minimum number of variables are constrained in non-additive ways.
+
+#### blindfold relation
+
+$\textbf{w}' \overset{\\$}{\leftarrow} \mathbb{Z}_q^n$ sample a random witness mask vector.
+
+An R3CS instance is created using $\textbf{w}'$ (and $s = 1$ omitted):
+
+$\textbf{e}' \leftarrow \textbf{Aw}'\textbf{Bw}' - \textbf{Cw}' \in \mathbb{Z}_q^m$
+
+A final R3CS relation is formed using the above R1CS and R3CS:
+
+$\textbf{e} \leftarrow \textbf{Aw}' \textbf{Bw} + \textbf{AwBw}' - \textbf{Cw} - \textbf{Cw}'$
+
+$\textbf{e} + \textbf{e}' = \textbf{A}(\textbf{w} + \textbf{w}')\textbf{B}(\textbf{w} + \textbf{w}') - \textbf{C}(\textbf{w} + \textbf{w}')$
+
+$c \overset{\\$}{\leftarrow} \mathbb{Z}_q$ sample a challenge scalar from commitments to $\textbf{w}$, $\textbf{w}'$, $\textbf{e}$ and $\textbf{e}'$.
+
+A final public witness is formed:
+
+$\textbf{w}_f \overset{\pi}{\leftarrow} \textbf{w}' + c\textbf{w}$
+
+A final public crossterm is formed:
+
+$\textbf{e}_f \overset{\pi}{\leftarrow} \textbf{e}' + c \textbf{e}$
+
+Commitments to $\textbf{e}$, $\textbf{e}'$, $\textbf{w}$ and $\textbf{w}'$ must argue existence of $\textbf{e}_f$ and $\textbf{w}_f$ as above.
+
+Verification requires checking the following:
+
+- $c \overset{\\$}{\leftarrow} \textbf{w}, \textbf{w}', \textbf{e}, \textbf{e}'$
+- $\textbf{w}_f^{\pi}$
+- $\textbf{e}_f^{\pi}$
+- $\textbf{e}_f = \textbf{Aw}_f + \textbf{Bw}_f - (1 + c)\textbf{Cw}_f$
+
+This requires linear homomorphism only. Recursive operations require binding only (not hiding). Statistical hiding is possible using large lattice bases.
+
+This system transforms an R1CS into an R3CS over the same constraint matrices with a public token witness.
 
 === RKCS digression
 
@@ -28,31 +65,3 @@ Can we make arguments that a program was executed in the future?
 Provided time is not totally ordered.
 
 ===
-
-`A, B, C: Matrix<Scalar>`
-
-`w: Vector<Scalar>`
-
-A vector `w_m =` witness mask is randomly sampled from the field.
-
-An R3CS instance is created using `w_m` and `s = 1`:
-
-`E <- Aw_mBw_m - sCw_m`
-
-An R3CS is created by joining the R1CS and the R3CS above:
-
-`E == A(w + w_m)B(w + w_m) - sC(w + w_m)`
-
-A scalar `c =` challenge is randomly sampled from commitments to above. The system is algebraically transformed to the following relation:
-
-- `w_f <-? w_m + c * w`
-- `x <- Aw_mBw + AwBw_m - Cw - Cw_m`
-- `c*x == Aw_f + Bw_f - (1 + c)Cw_f`
-
-Commitments to `w` and `w_m` must argue existence of `w_f` such that `w_f == w_m + c * w`.
-
-`w_f` is public knowledge.
-
-This requires linear homomorphism only. Recursive operations require binding only (not hiding). Statistical hiding is possible using large lattice bases.
-
-This system transforms an R1CS into an R3CS over the same constraint matrices with a hidden witness.
