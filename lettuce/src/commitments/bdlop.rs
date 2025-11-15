@@ -9,6 +9,8 @@ const SIGMA: f64 = 27000f64;
 
 /// Argues knowledge of two BDLOP commitments such that
 /// c_a = g * c_b
+///
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BDLOPLinearNIZKArg<const N: usize, E: FieldScalar> {
     pub g: Polynomial<N, E>,
     pub c_a: BDLOP<N, E>,
@@ -77,6 +79,7 @@ impl<const N: usize, E: FieldScalar> BDLOPLinearNIZKArg<N, E> {
 /// challenge elements. The sigma and dimension parameters
 /// have also not be analyzed for security.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BDLOP<const N: usize, E: FieldScalar> {
     a_1: Arc<Matrix<Polynomial<N, E>>>,
     a_2: Arc<Matrix<Polynomial<N, E>>>,

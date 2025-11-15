@@ -1,6 +1,7 @@
 use crate::*;
 
 /// Instance of a rank 1 constraint system over a finite field or ring.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct R1CS<E: RingElement> {
     pub a: Matrix<E>,
     pub b: Matrix<E>,

@@ -13,6 +13,7 @@ const MONT: Montgomery32 = Montgomery32::new(CARDINALITY);
 ///
 /// This prime is referred to as "milli"
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MilliScalarMont(u32);
 
 impl RingElement for MilliScalarMont {

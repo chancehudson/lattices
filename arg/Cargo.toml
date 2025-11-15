@@ -1,5 +1,5 @@
 [package]
-name = "hidden_r1cs"
+name = "arg"
 version = "0.1.0"
 edition = "2024"
 
@@ -11,6 +11,6 @@ rand_chacha = { workspace = true }
 serde = { workspace = true }
 
 lettuce = { workspace = true }
+hidden_r1cs = { workspace = true }
 zkpo = { workspace = true }
 
-blake3 = "1.8.2"

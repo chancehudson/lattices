@@ -14,8 +14,9 @@ name = "polynomial"
 harness = false
 
 [features]
-default = ["rayon"]
+default = ["rayon", "serde"]
 rayon = ["dep:rayon"]
+serde = ["dep:serde"]
 
 [dependencies]
 # external log facade
@@ -23,6 +24,9 @@ log_ext = { package = "log", version = "0" }
 anyhow = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+serde = { workspace = true, optional = true, features = ["rc", "derive"] }
+
+serde-big-array = "0"
 
 blake3 = "1.8.2"
 const-primes = "0"

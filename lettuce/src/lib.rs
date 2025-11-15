@@ -271,4 +271,70 @@ pub trait FieldScalar:
         assert!(v < Self::CARDINALITY);
         v.into()
     }
+
+    /// Calculate the [legendre symbol](https://en.wikipedia.org/wiki/Legendre_symbol#Definition)
+    /// for a field element. Used to determine if the
+    /// element is a quadratic residue.
+    fn legendre(&self) -> i32 {
+        if self == &Self::zero() {
+            return 0;
+        }
+        let e = (Self::negone()) * (Self::one() + Self::one()).inverse();
+        let l = self.modpow(e.into());
+        if l == Self::negone() {
+            -1
+        } else if l == Self::one() {
+            return 1;
+        } else {
+            panic!("legendre symbol is not 1, -1, or 0");
+        }
+    }
+
+    /// [Kumar 08](https://arxiv.org/pdf/2008.11814v4) prime field square root implementation.
+    /// Always returns the smaller root e.g. the positive root.
+    fn sqrt(&self) -> Self {
+        if self == &Self::zero() {
+            return Self::zero();
+        }
+        if self.legendre() != 1 {
+            panic!("legendre symbol is not 1: root does not exist or input is 0");
+        }
+        // find a non-residue
+        let mut x = Self::one() + Self::one();
+        let non_residue;
+        loop {
+            if x.legendre() == -1 {
+                non_residue = x.clone();
+                break;
+            }
+            x += Self::one();
+        }
+        let b = non_residue;
+
+        let a = self;
+        let two = Self::one() + Self::one();
+        let m = (Self::negone()) * two.clone().inverse();
+        let mut apow = Self::negone();
+        let mut bpow = Self::zero();
+        while apow.into() % 2 == 0 {
+            apow = apow * two.clone().inverse();
+            bpow = bpow * two.clone().inverse();
+            let a_ = a.modpow(apow.into());
+            let b_ = b.modpow(bpow.into());
+            if a_ * b_ == Self::negone() {
+                bpow += m.clone();
+            }
+        }
+        apow = (apow + Self::one()) * two.clone().inverse();
+        bpow = bpow * two.inverse();
+        let a_ = a.modpow(apow.into());
+        let b_ = b.modpow(bpow.into());
+        let root = a_ * b_;
+        let other_root = Self::Q - root.clone().into();
+        if root.into() > other_root.into() {
+            other_root.into()
+        } else {
+            root
+        }
+    }
 }

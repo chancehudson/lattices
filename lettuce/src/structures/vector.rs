@@ -7,11 +7,10 @@ use crate::*;
 // can transfer between threads to evaluate as needed
 /// A vector of ring elements. Supports arithmetic with other vectors, matrices, and ring elements.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Vector<E: RingElement> {
     entries: Vec<E>,
 }
-
-impl<E: RingElement> Vector<E> {}
 
 impl<E: RingElement> Vector<E> {
     pub fn new(len: usize) -> Self {

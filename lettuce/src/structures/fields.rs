@@ -52,6 +52,7 @@ macro_rules! integer_prime_field {
 
         /// Automatically generate `FieldScalar` impl.
         #[derive(Debug, Copy, Clone, Default, PartialEq)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         pub struct $name($data_ty);
 
         impl RingElement for $name {

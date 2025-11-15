@@ -4,6 +4,7 @@ use anyhow::Result;
 
 /// A toy implementation of LWE commitments. Use at your own risk.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct LWEScalar<E: FieldScalar> {
     lattice: Matrix<E>,
     commitment: Vector<E>,

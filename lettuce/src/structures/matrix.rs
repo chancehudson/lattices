@@ -6,6 +6,7 @@ use crate::*;
 /// A matrix of ring elements. Supports arithmetic with other matrices, vectors and ring elements.
 /// Supports concurrent operations with the `rayon` feature.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Matrix<E: RingElement> {
     width: usize,
     height: usize,
@@ -93,6 +94,11 @@ impl<E: RingElement> Matrix<E> {
     pub fn iter(&self) -> impl Iterator<Item = &Vector<E>> {
         self.entries.iter()
     }
+
+    /// Get a mutable iterator over each row of the matrix `self`.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Vector<E>> {
+        self.entries.iter_mut()
+    }
 }
 
 impl<E: RingElement> FromIterator<Vector<E>> for Matrix<E> {
@@ -173,6 +179,22 @@ impl<E: RingElement> MulAssign<&Self> for Matrix<E> {
             for other_row in rhs.entries.iter() {
                 *self_row *= other_row;
             }
+        }
+    }
+}
+
+impl<E: RingElement> Mul<E> for Matrix<E> {
+    type Output = Self;
+    fn mul(mut self, rhs: E) -> Self::Output {
+        self *= rhs;
+        self
+    }
+}
+
+impl<E: RingElement> MulAssign<E> for Matrix<E> {
+    fn mul_assign(&mut self, rhs: E) {
+        for v in self.iter_mut() {
+            *v *= rhs;
         }
     }
 }

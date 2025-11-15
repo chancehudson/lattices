@@ -2,9 +2,14 @@ use anyhow::Result;
 use lettuce::*;
 use rand::Rng;
 use rand::SeedableRng;
+use serde::Deserialize;
+use serde::Serialize;
+use zkpo::ZKArg;
+use zkpo::ZKProgram;
 
 /// Given an r1cs instance and a witness generate a hidden witness that fulfills a relaxed R1CS
 /// relation and lattice NIZK arguments of consistency.
+#[derive(Serialize, Deserialize)]
 pub struct HiddenR1CS<const N: usize, E: FieldScalar> {
     /// The base r1cs constraint system
     r1cs: R1CS<E>,
@@ -23,6 +28,12 @@ pub struct HiddenR1CS<const N: usize, E: FieldScalar> {
     /// Linear zk arg of crossterm challenge
     crossterm_arg: BDLOPLinearNIZKArg<N, E>,
 }
+
+// impl<const N: usize, E: FieldScalar> ZKArg<E> for HiddenR1CS<N, E> {
+//     fn program(&self) -> Option<impl ZKProgram<E>> {
+//         None
+//     }
+// }
 
 impl<const N: usize, E: FieldScalar> HiddenR1CS<N, E> {
     /// Commit to a witness and generate a hidden witness that fulfills a relaxed R1CS instance

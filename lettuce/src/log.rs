@@ -26,6 +26,14 @@ macro_rules! error {
     };
 }
 
+macro_rules! warning{
+    ($($input:expr),*) => {
+        #[cfg(test)]
+        std::sync::LazyLock::<()>::force(&log::SETUP);
+        log_ext::warn!("{}{}", crate::log::PREFIX, format!($($input,)*));
+    };
+}
+
 macro_rules! info {
     ($($input:expr),*) => {
         #[cfg(test)]
@@ -45,3 +53,4 @@ macro_rules! debug {
 pub(crate) use debug;
 pub(crate) use error;
 pub(crate) use info;
+pub(crate) use warning;

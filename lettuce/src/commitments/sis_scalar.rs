@@ -5,6 +5,7 @@ use crate::*;
 ///
 /// A toy implementation of SIS commitments. Use at your own risk.
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct SISScalar<E: FieldScalar> {
     lattice: Matrix<E>,
     pub commitment: Vector<E>,

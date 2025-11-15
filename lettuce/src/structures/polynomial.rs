@@ -4,7 +4,16 @@ use crate::*;
 /// Accelerated with negacyclic number theoretic transforms and lazy moves between coefficient and
 /// eval representation.
 #[derive(Clone, Copy, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "E: RingElement + serde::Serialize",
+        deserialize = "E: RingElement + serde::Deserialize<'de>"
+    ))
+)]
 pub struct Polynomial<const N: usize, E: FieldScalar> {
+    #[cfg_attr(feature = "serde", serde(with = "serde_big_array::BigArray"))]
     coefs: [E; N],
     is_coef_form: bool,
 }
