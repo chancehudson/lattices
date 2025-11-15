@@ -164,9 +164,19 @@ TODO: test circuits with lots of input/output interaction, poseidonT16 poseidont
 
 \textbf{Argument}:
 
-Rewrite the above $c$ constraint as $c = w + e$ where $w$ is the un-mangled intermediate value. The only possible subsequent constraints are $0 = c + z$, $0 = c - z$, or $0 = c^2$. The first two yield trivial linear combinations, and the final one yields $0 = w^2 + we + e$, which combines two secret linear terms into one $0 = w^2 + e'$. The error term is a high dimension linear combination, but is information theoretically masked: verifier knows only two terms.
+Rewrite the above $c$ constraint as $c = w + e$ where $w$ is the un-mangled intermediate value. The only possible subsequent constraints are $0 = c + z$, $0 = c - z$, or $0 = c^2$. The first two yield linear combinations of independently masked values, and the final one yields $0 = w^2 + we + e$, which combines two secret linear terms into one $0 = w^2 + e'$. The error term is a high dimension linear combination, but is information theoretically masked: verifier knows only two terms.
+
+The intuition here is, once every input is linearly masked, the mask is inseperable without knowledge of either the input or the mask value. So you can run the masked value through whatever nonsense as long as outputs are masked as well which avoids forming a system of equations by arguing lack of information.
+
+TODO: probably definitely commit and hide the $e$ value at the end.
 
 Also if it's not information theoretically masked we can toss it in a commitment and linear ZK arg while keeping $\mathcal{O}(1)$ size.
+
+\subsection{Underdetermined systems}
+
+Given a linear equation $x = y + z$, the system is information theoretically unsolvable with knowledge of only one variable. Given a linear equation $x = (y + z) + (k + j)$, the system is unsolvable with knowledge of < 4 variables. Given a linear equation over $n$ variables the system is unsolvable with knowledge of < $n - 1$ variables.\\
+
+In this work each input is masked using a linear system of three variables. Two of the three variables are never revealed, so inputs are information theoretically unrecoverable regardless of relation with outputs or intermediate steps.
 
 \subsection{Lettuce}
 
